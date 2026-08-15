@@ -333,11 +333,6 @@ function UI.RefreshMainPanel()
         line = line .. "\n" .. table.concat(parts, "  -  ")
     end
 
-    if slotData and slotData.goal == "gold_hunt" and slotData.goldHuntAmount then
-        local goldCount = (bridge and bridge.goldCount) or 0
-        line = line .. string.format("\nGold: %d/%d", goldCount, slotData.goldHuntAmount)
-    end
-
     local pendingCount = #ArchipelagoWoWDB.pendingChecks
     if pendingCount > 0 then
         line = line .. string.format("\n|cffffcc00%d level(s) queued, will send on next sync|r", pendingCount)
@@ -470,7 +465,14 @@ function UI.RefreshZonesPanel()
     local lines = {}
 
     local levelCap = bridge.currentLevelCap or 10
-    frame.subtitle:SetText(string.format("Current level cap: %d (as of last sync)", levelCap))
+    local subtitle = string.format("Current level cap: %d (as of last sync)", levelCap)
+
+    local slotData = bridge.slotData
+    if slotData and slotData.goal == "gold_hunt" and slotData.goldHuntAmount then
+        local goldCount = bridge.goldCount or 0
+        subtitle = subtitle .. string.format("\nGold: %d/%d", goldCount, slotData.goldHuntAmount)
+    end
+    frame.subtitle:SetText(subtitle)
 
     AppendCountedSection(lines, "Level Items Received", bridge.levelItems)
 
