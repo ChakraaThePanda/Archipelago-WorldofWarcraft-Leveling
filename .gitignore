@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+# Release artifacts: built by tools/build_apworld.py and tools/build_addons_zip.py, and
+# meant to be attached as GitHub release assets for players to download/link directly --
+# not committed source (matching Archipelago-Northgard's convention for its own
+# northgard.apworld/Northgard.yaml). Rebuild locally with those scripts any time.
+/wow_leveling.apworld
+/addons.zip
+/World of Warcraft Leveling.yaml
