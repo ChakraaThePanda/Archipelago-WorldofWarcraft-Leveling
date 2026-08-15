@@ -69,6 +69,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import typing
 
@@ -113,6 +114,23 @@ BRIDGE_DB_VAR = "ArchipelagoWoW_BridgeDB"
 # data and needs a second reload to catch up (confirmed live: at 2.0s this was genuinely
 # noticeable). 0.5s keeps that window well under normal human reaction time instead.
 POLL_INTERVAL_SECONDS = 0.5
+# How often the bridge file gets rewritten on disk even when nothing in it actually
+# changed, purely so lastSyncEpoch (the addon's "synced Xs ago" display) doesn't go stale
+# during an idle period. Deliberately much longer than POLL_INTERVAL_SECONDS: writing this
+# file on literally every poll tick was pure overhead for no observable benefit, since
+# nothing reads it that often. NOTE: this is *not* what caused the client-close hang once
+# attributed to it (see SHUTDOWN_TIMEOUT_SECONDS for the actual fix) -- WoW's own
+# SavedVariables flush writes ArchipelagoWoW.lua, a different file the bridge only ever
+# reads, never ArchipelagoWoW_Bridge.lua, so the two processes were never actually
+# contending for the same file in the first place.
+MIN_BRIDGE_WRITE_INTERVAL_SECONDS = 5.0
+# Absolute deadline for the entire close sequence in main() -- past this, the process is
+# force-killed outright via the watchdog thread armed there, rather than kept waiting on
+# whatever caused the hang. Short on purpose: everything this deadline covers (cancelling
+# bridge_loop, one best-effort file write, a disconnect handshake) is normally sub-second, so
+# this only ever actually elapses when something really is stuck -- at which point there's
+# nothing more to gain by waiting longer.
+SHUTDOWN_TIMEOUT_SECONDS = 3.0
 MAX_INCOMING_LOG = 200
 
 # Locations are declared "Level 01".."Level 90" (zero-padded to 2 digits -- see
@@ -610,6 +628,10 @@ class WoWLevelingContext(CommonContext):
         # only grow by the genuinely-new tail, not replay the same history again.
         self._incoming_log_processed_count: int = 0
 
+        # Used to skip redundant bridge-file writes -- see MIN_BRIDGE_WRITE_INTERVAL_SECONDS.
+        self._last_bridge_fingerprint: typing.Optional[tuple] = None
+        self._last_bridge_write_time: float = 0.0
+
         # Level numbers most recently read from the addon's pendingChecks -- cached here
         # (rather than only acted on inside _handle_addon_file_change) so a poll tick that
         # ISN'T a file-change tick still retries sending these until the server acks them.
@@ -635,6 +657,15 @@ class WoWLevelingContext(CommonContext):
             self.seed_name = args.get("seed_name")
         elif cmd == "Connected":
             self.slot_data = args.get("slot_data", {}) or {}
+            # Reset on every (re)connect, not just at ctx construction: reconnecting the
+            # same running client to a DIFFERENT slot/room reuses this same context
+            # object, so without this, a goal already sent for a previous slot this
+            # session would permanently block _maybe_send_goal from ever re-checking the
+            # new slot's own goal -- confirmed live (this is exactly what happened testing
+            # a 2-slot room from one client: goaled slot 1, reconnected as slot 2, slot
+            # 2's Gold Hunt was fully met but never sent because goal_sent was still True
+            # from slot 1).
+            self.goal_sent = False
         elif cmd == "ConnectionRefused":
             logger.warning(f"[WoW Leveling] Server refused the connection: {args.get('errors')}")
         elif cmd == "ReceivedItems":
@@ -810,6 +841,37 @@ def _write_bridge_file(ctx: WoWLevelingContext, addon_path: str) -> None:
         logger.warning(f"[WoW Leveling] Couldn't write {bridge_path}: {e}")
 
 
+def _bridge_db_fingerprint(ctx: WoWLevelingContext) -> tuple:
+    """Everything in _build_bridge_db that the addon actually displays, EXCLUDING
+    lastSyncEpoch (which is always "different" by definition) -- used by bridge_loop to
+    decide whether a write would actually change anything on disk. See
+    MIN_BRIDGE_WRITE_INTERVAL_SECONDS for why avoiding a no-op write matters."""
+    return (
+        ctx.server is not None,
+        tuple(sorted(_acked_levels(ctx).items())),
+        tuple(sorted(ctx.unlocked_zones)),
+        tuple(sorted(ctx.level_item_counts.items())),
+        ctx.gold_count,
+        len(ctx.incoming_log),
+    )
+
+
+def _maybe_write_bridge_file(ctx: WoWLevelingContext, addon_path: str) -> None:
+    """Writes the bridge file only when its content actually changed since the last
+    write, or MIN_BRIDGE_WRITE_INTERVAL_SECONDS has passed regardless (so lastSyncEpoch
+    doesn't go stale during an idle period) -- rather than unconditionally on every single
+    poll tick, which was pure disk-write overhead for no benefit (see
+    MIN_BRIDGE_WRITE_INTERVAL_SECONDS -- this is unrelated to the client-close hang, which
+    was a missing timeout on shutdown itself; see SHUTDOWN_TIMEOUT_SECONDS)."""
+    fingerprint = _bridge_db_fingerprint(ctx)
+    now = time.time()
+    if fingerprint == ctx._last_bridge_fingerprint and (now - ctx._last_bridge_write_time) < MIN_BRIDGE_WRITE_INTERVAL_SECONDS:
+        return
+    ctx._last_bridge_fingerprint = fingerprint
+    ctx._last_bridge_write_time = now
+    _write_bridge_file(ctx, addon_path)
+
+
 async def bridge_loop(ctx: WoWLevelingContext) -> None:
     while not ctx.exit_event.is_set():
         try:
@@ -832,13 +894,11 @@ async def bridge_loop(ctx: WoWLevelingContext) -> None:
                     # from server-side activity (a Gold item landing pushes gold_count over
                     # the Gold Hunt amount) with no addon-side file change involved at all.
                     await _maybe_send_goal(ctx)
-                    # Always refresh the bridge file for the active character, even when
-                    # the addon file itself hasn't changed this tick -- ackedLevels/
-                    # unlockedZones/connected can all change from server activity alone
-                    # (ReceivedItems, a location check landing) between addon reloads, and
-                    # lastSyncEpoch should stay fresh so the addon's "synced Xs ago" display
-                    # (see Core.FormatRelativeTime) is meaningful.
-                    _write_bridge_file(ctx, addon_path)
+                    # Checked every tick (cheap), but only actually writes to disk when
+                    # something changed or MIN_BRIDGE_WRITE_INTERVAL_SECONDS has passed --
+                    # see _maybe_write_bridge_file's docstring for why unconditional writes
+                    # here were a real problem.
+                    _maybe_write_bridge_file(ctx, addon_path)
         except Exception:
             logger.exception("[WoW Leveling] bridge_loop iteration failed")
 
@@ -858,21 +918,51 @@ async def main(args) -> None:
 
     await ctx.exit_event.wait()
     ctx.server_address = None
-    await watcher_task
+
+    # Absolute backstop, armed the instant the window is asked to close: if this process is
+    # still alive after SHUTDOWN_TIMEOUT_SECONDS, kill it immediately, full stop. This has to
+    # be a real OS thread, not an asyncio-level timeout (asyncio.wait_for/wait were tried
+    # first and confirmed live to still take the *entire* bounded duration, ~15s, and leave
+    # the window "Not Responding" throughout) -- asyncio's own timers run on the very same
+    # thread as the code they're timing out, so a genuinely blocking synchronous call (a
+    # stuck file open(), a socket call with no async cancellation point) starves the timeout
+    # callback exactly as much as it starves everything else. A watchdog on its own thread
+    # keeps running regardless (blocking C calls release the GIL while they wait), so it's
+    # the only way to guarantee the window actually disappears on schedule no matter what
+    # kind of hang caused this. os._exit(), not sys.exit(): skips atexit/thread-join/asyncio
+    # finalization entirely, which is the point -- any of those could be the very thing
+    # that's stuck.
+    watchdog = threading.Timer(SHUTDOWN_TIMEOUT_SECONDS, os._exit, args=(1,))
+    watchdog.daemon = True
+    watchdog.start()
+
+    # Everything below is best-effort now that the watchdog guarantees an upper bound --
+    # cancel() is fired and NOT awaited (awaiting it would just reintroduce the same
+    # thread-starvation problem the watchdog exists to route around), and the final write and
+    # disconnect are wrapped so an exception in either still lets the other run.
+    watcher_task.cancel()
 
     # One last write on a clean shutdown so the addon shows "Not connected" on its next
     # login/reload, rather than being stuck showing whatever "connected" was true as of
-    # the last poll tick before this process closed -- SavedVariables only reflect
-    # whatever was last written, and nothing else will ever correct it once this process
-    # exits. Explicitly force ctx.server to None (rather than assume the base client
-    # already cleared it by this point) so _build_bridge_db's "connected" is unambiguously
-    # False here. NOTE: this can't help on a forceful kill/crash -- only a clean shutdown
-    # (closing the GUI window, Ctrl+C) runs this.
+    # the last poll tick before this process closed -- SavedVariables only reflect whatever
+    # was last written, and nothing else will ever correct it once this process exits.
+    # Explicitly force ctx.server to None (rather than assume the base client already cleared
+    # it by this point) so _build_bridge_db's "connected" is unambiguously False here. NOTE:
+    # this can't help on a forceful kill/crash (including the watchdog firing) -- only a
+    # clean shutdown that finishes before the deadline runs this.
     if ctx.active_addon_sv_path:
         ctx.server = None
-        _write_bridge_file(ctx, ctx.active_addon_sv_path)
+        try:
+            _write_bridge_file(ctx, ctx.active_addon_sv_path)
+        except Exception:
+            logger.exception("[WoW Leveling] Final bridge write on shutdown failed")
 
-    await ctx.shutdown()
+    try:
+        await ctx.shutdown()
+    except Exception:
+        logger.exception("[WoW Leveling] ctx.shutdown() failed")
+
+    watchdog.cancel()
 
 
 def launch() -> None:
