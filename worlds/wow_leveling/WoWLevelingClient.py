@@ -195,22 +195,28 @@ def _classify_item(item_name: str) -> typing.Optional[str]:
     return None
 
 
-_SEQUENTIAL_LEVEL_TO_INT: typing.Dict[str, int] = {
-    name: int(name.rsplit(" ", 1)[-1]) for name in _SEQUENTIAL_LEVEL_ITEMS
-}
-
-
 def _current_level_cap(level_item_counts: typing.Dict[str, int]) -> int:
     """Highest character level currently reachable purely from level-cap items received so
     far -- ignoring whether a zone item is also available for that bracket, which the
     addon already shows separately under "Zones Unlocked". Baseline is
     BRACKET_MAX_LEVEL[0] (10): "Levels 01-10" needs no item at all (see Rules.py), so
-    that's always reachable regardless of what's been received."""
-    sequential_levels = [
-        value for name, value in _SEQUENTIAL_LEVEL_TO_INT.items() if level_item_counts.get(name)
-    ]
-    if sequential_levels:
-        return max(sequential_levels)
+    that's always reachable regardless of what's been received.
+
+    The level-bracket regions are a strict chain (see create_regions' entrance rules) --
+    reaching bracket N requires having already reached bracket N-1 -- so in Sequential
+    Levels mode, the first missing "Maximum Level" item anywhere in the chain caps the
+    player there, regardless of which LATER "Maximum Level" items they've also received:
+    a multiworld can deliver items in any order (only location CHECKS respect logic, not
+    what you're randomly sent), so holding "Maximum Level 80" without "Maximum Level 50"
+    yet is completely normal and must not read as an 80 cap -- confirmed live: a player
+    with 20/30/40/70/80 but no 50/60 was shown a level 80 cap while unable to level past 40."""
+    if any(level_item_counts.get(name) for name in _SEQUENTIAL_LEVEL_ITEMS):
+        cap = _BRACKET_MAX_LEVEL[0]
+        for name, level in zip(_SEQUENTIAL_LEVEL_ITEMS, _BRACKET_MAX_LEVEL[1:]):
+            if not level_item_counts.get(name):
+                break
+            cap = level
+        return cap
 
     progressive_count = level_item_counts.get(_PROGRESSIVE_LEVELS_ITEM_NAME, 0)
     index = max(0, min(progressive_count, len(_BRACKET_MAX_LEVEL) - 1))
@@ -303,6 +309,14 @@ def _save_config(config: dict) -> None:
         logger.warning(f"[WoW Leveling] Couldn't persist client config to {_CONFIG_FILE}")
 
 
+def _update_config(**updates) -> None:
+    """Load-mutate-save in one step -- the repeated pattern for every persisted config
+    change (wow_install_dir, pinned_character)."""
+    config = _load_config()
+    config.update(updates)
+    _save_config(config)
+
+
 # Battle.net-managed installs (retail, Classic, Classic Era, PTR, ...) organize each game
 # version into its own subfolder under one shared install root -- WTF lives inside that
 # subfolder (e.g. ".../World of Warcraft/_retail_/WTF"), not directly in the root the way
@@ -378,8 +392,7 @@ def _resolve_wow_install_dir() -> str:
     detected = _detect_wow_install_dir()
     if detected:
         logger.info(f"[WoW Leveling] Auto-detected WoW install folder: {detected}")
-        config["wow_install_dir"] = detected
-        _save_config(config)
+        _update_config(wow_install_dir=detected)
         return detected
 
     logger.info(
@@ -397,8 +410,7 @@ def _resolve_wow_install_dir() -> str:
 
     resolved_picked = _resolve_wtf_containing_dir(picked)
     if resolved_picked:
-        config["wow_install_dir"] = resolved_picked
-        _save_config(config)
+        _update_config(wow_install_dir=resolved_picked)
         logger.info(f"[WoW Leveling] Using {resolved_picked}. Change it later with /wowdir <path>.")
         return resolved_picked
 
@@ -420,11 +432,11 @@ def _find_addon_sv_files(wow_install_dir: str) -> typing.List[str]:
     return glob.glob(pattern)
 
 
-def _most_recent_addon_sv(wow_install_dir: str) -> typing.Optional[str]:
+def _most_recent_addon_sv(files: typing.List[str]) -> typing.Optional[str]:
     """Fallback only -- see _resolve_active_addon_sv. Whichever ArchipelagoWoW.lua under
     WTF/Account/**/SavedVariables/ was written most recently, i.e. whichever character
-    most recently logged out or ReloadUI()'d."""
-    files = _find_addon_sv_files(wow_install_dir)
+    most recently logged out or ReloadUI()'d. Takes the already-globbed candidate list
+    rather than re-scanning, since the caller already has it."""
     if not files:
         return None
     try:
@@ -474,7 +486,7 @@ def _resolve_active_addon_sv(ctx: "WoWLevelingContext") -> typing.Optional[str]:
             f"and none is pinned -- guessing the most-recently-used one. Run /wowchar to pin "
             f"the right one explicitly."
         )
-    return _most_recent_addon_sv(ctx.wow_install_dir)
+    return _most_recent_addon_sv(files)
 
 
 def _bridge_sv_path_for(addon_sv_path: str) -> str:
@@ -517,9 +529,7 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
             return False
 
         ctx.wow_install_dir = resolved
-        config = _load_config()
-        config["wow_install_dir"] = resolved
-        _save_config(config)
+        _update_config(wow_install_dir=resolved)
         logger.info(f"[WoW Leveling] WoW install folder set to {resolved}")
         return True
 
@@ -568,9 +578,7 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
             return False
 
         ctx.pinned_character = chosen
-        config = _load_config()
-        config["pinned_character"] = chosen
-        _save_config(config)
+        _update_config(pinned_character=chosen)
         logger.info(f"[WoW Leveling] Pinned character set to {chosen}.")
         return True
 
@@ -664,8 +672,12 @@ class WoWLevelingContext(CommonContext):
             # new slot's own goal -- confirmed live (this is exactly what happened testing
             # a 2-slot room from one client: goaled slot 1, reconnected as slot 2, slot
             # 2's Gold Hunt was fully met but never sent because goal_sent was still True
-            # from slot 1).
+            # from slot 1). incoming_log/_incoming_log_processed_count get the same
+            # treatment for the same reason -- otherwise the previous slot's activity-feed
+            # entries would stay mixed into the new slot's "incoming" list sent to the addon.
             self.goal_sent = False
+            self.incoming_log = []
+            self._incoming_log_processed_count = 0
         elif cmd == "ConnectionRefused":
             logger.warning(f"[WoW Leveling] Server refused the connection: {args.get('errors')}")
         elif cmd == "ReceivedItems":
@@ -810,7 +822,6 @@ async def _maybe_send_goal(ctx: WoWLevelingContext) -> None:
         await ctx.send_msgs([{"cmd": "LocationChecks", "locations": [loc_id]}])
 
     ctx.goal_sent = True
-    logger.info("[WoW Leveling] Goal complete! Sending StatusUpdate to the server.")
     await ctx.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
 
 
@@ -831,23 +842,34 @@ def _build_bridge_db(ctx: WoWLevelingContext) -> dict:
 def _write_bridge_file(ctx: WoWLevelingContext, addon_path: str) -> None:
     bridge_path = _bridge_sv_path_for(addon_path)
     text = dumps_lua_assignment(BRIDGE_DB_VAR, _build_bridge_db(ctx))
+    tmp_path = bridge_path + ".tmp"
     try:
         os.makedirs(os.path.dirname(bridge_path), exist_ok=True)
-        tmp_path = bridge_path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
         os.replace(tmp_path, bridge_path)  # atomic on Windows for same-volume renames
     except OSError as e:
         logger.warning(f"[WoW Leveling] Couldn't write {bridge_path}: {e}")
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def _bridge_db_fingerprint(ctx: WoWLevelingContext) -> tuple:
     """Everything in _build_bridge_db that the addon actually displays, EXCLUDING
     lastSyncEpoch (which is always "different" by definition) -- used by bridge_loop to
     decide whether a write would actually change anything on disk. See
-    MIN_BRIDGE_WRITE_INTERVAL_SECONDS for why avoiding a no-op write matters."""
+    MIN_BRIDGE_WRITE_INTERVAL_SECONDS for why avoiding a no-op write matters.
+
+    slotData/seedName are included so reconnecting to a different slot (which can change
+    goal/faction/expansion/gold_hunt_amount while the other tracked fields still happen to
+    match the previous slot's values) doesn't get skipped by the debounce -- without this
+    the addon could keep displaying the previous slot's data for up to
+    MIN_BRIDGE_WRITE_INTERVAL_SECONDS after switching."""
     return (
         ctx.server is not None,
+        tuple(sorted(_translate_slot_data(ctx.slot_data or {}, ctx.seed_name).items())),
         tuple(sorted(_acked_levels(ctx).items())),
         tuple(sorted(ctx.unlocked_zones)),
         tuple(sorted(ctx.level_item_counts.items())),
@@ -877,7 +899,13 @@ async def bridge_loop(ctx: WoWLevelingContext) -> None:
         try:
             if ctx.wow_install_dir:
                 addon_path = _resolve_active_addon_sv(ctx)
-                if addon_path is not None:
+                if addon_path is None:
+                    # Character folder disappeared/renamed since the last tick -- don't
+                    # leave a stale path behind (checked by /synced and by the final
+                    # shutdown write, which would otherwise happily recreate a deleted
+                    # character's SavedVariables directory).
+                    ctx.active_addon_sv_path = None
+                else:
                     ctx.active_addon_sv_path = addon_path
                     try:
                         mtime = os.path.getmtime(addon_path)

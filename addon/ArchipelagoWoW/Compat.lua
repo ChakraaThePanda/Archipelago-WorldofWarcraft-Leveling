@@ -33,11 +33,14 @@ Compat.IsMists = isProject(WOW_PROJECT_MISTS_CLASSIC)
 -- assume legacy widget behavior.
 Compat.IsLegacyClient = not (Compat.IsMainline or Compat.IsVanilla or Compat.IsBCC or Compat.IsCata or Compat.IsMists)
 
--- Only true modern Mainline (retail) requires the explicit "BackdropTemplate"
--- template string passed to CreateFrame. Every Classic-family client (and any
--- client where WOW_PROJECT_ID isn't even defined) already has backdrop methods
--- built into the base Frame widget.
-Compat.NeedsBackdropTemplate = Compat.IsMainline and true or false
+-- Detected off the actual API surface (whether the BackdropTemplate mixin
+-- exists at all) rather than off client flavor: Blizzard has periodically
+-- rebased later Classic-family content-phase clients onto the same
+-- modernized frame codebase as retail, which can require the mixin there too
+-- even though WOW_PROJECT_ID still reports a Classic project. A frame that
+-- doesn't need the mixin already has backdrop methods built into the base
+-- Frame widget, so BackdropTemplateMixin being absent is the correct signal.
+Compat.NeedsBackdropTemplate = BackdropTemplateMixin ~= nil
 
 -- Creates a frame, adding the BackdropTemplate mixin only where required.
 function Compat.CreateFrame(frameType, name, parent, template)

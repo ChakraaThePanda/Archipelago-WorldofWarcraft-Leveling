@@ -5,7 +5,15 @@
 -- nothing left to configure in-game (see CreateMainPanel's own comment for why).
 --
 -- Honesty note baked into every status string below: everything shown here
--- reflects the state as of the last sync (last ReloadUI), never "live".
+-- reflects the state as of the last sync (last ReloadUI), never "live". There
+-- is deliberately no "Connected"/"Not connected" indicator anywhere in this
+-- file -- ArchipelagoWoW_BridgeDB.connected is only ever as fresh as your last
+-- reload, and the bridge only corrects it to false on a *clean* shutdown, so a
+-- crashed/force-closed bridge can leave it reading true indefinitely. A claim
+-- that can silently go wrong that way and never self-corrects isn't worth
+-- displaying at all; "synced Xs/Xm/Xh ago" (Core.FormatRelativeTime) plus the
+-- "Sync Now (Reload UI)" button are the only trustworthy signals this addon
+-- can actually offer, so that's all it shows.
 
 local ADDON_NAME, APW = ...
 
@@ -15,8 +23,6 @@ local Compat = APW.Compat
 local Core = APW.Core
 local Sync = APW.Sync
 local Zones = APW.Zones
-
-UI.statusButtons = UI.statusButtons or {}
 
 -- ---------------------------------------------------------------------------
 -- Small shared helpers
@@ -30,35 +36,6 @@ local function DisplayCase(s)
     s = tostring(s):gsub("_", " ")
     s = s:gsub("(%a)([%w']*)", function(first, rest) return first:upper() .. rest:lower() end)
     return s
-end
-
--- Registers a button so UI.RefreshConnectionTint() keeps its status dot in
--- sync with ArchipelagoWoW_BridgeDB.connected.
-function UI.AddStatusDot(button)
-    local dot = button:CreateTexture(nil, "OVERLAY")
-    dot:SetSize(8, 8)
-    dot:SetPoint("LEFT", button, "LEFT", 6, 0)
-    dot:SetTexture("Interface\\Buttons\\WHITE8x8")
-    button.statusDot = dot
-    table.insert(UI.statusButtons, button)
-    return dot
-end
-
--- Green when the bridge reports connected, grey when it has never synced
--- even once (unknown), red when it has synced but reports not connected.
-function UI.RefreshConnectionTint()
-    local bridge = ArchipelagoWoW_BridgeDB
-    local r, g, b = 0.6, 0.6, 0.6
-    if bridge and bridge.connected then
-        r, g, b = 0.15, 0.9, 0.15
-    elseif bridge and bridge.lastSyncEpoch then
-        r, g, b = 0.9, 0.2, 0.2
-    end
-    for _, button in ipairs(UI.statusButtons) do
-        if button.statusDot then
-            button.statusDot:SetVertexColor(r, g, b, 1)
-        end
-    end
 end
 
 -- A manually-driven scroll frame (no template dependency): base ScrollFrame
@@ -90,7 +67,15 @@ function UI.CreateScrollingText(parent, width, height)
 
     scrollFrame:SetScript("OnMouseWheel", function(self, delta)
         local current = self:GetVerticalScroll()
-        local maxScroll = self.GetVerticalScrollRange and self:GetVerticalScrollRange() or 0
+        -- Older/unofficial client builds may lack GetVerticalScrollRange entirely --
+        -- fall back to computing it directly rather than defaulting to 0, which would
+        -- silently cap scrolling at the very top forever.
+        local maxScroll
+        if self.GetVerticalScrollRange then
+            maxScroll = self:GetVerticalScrollRange()
+        else
+            maxScroll = math.max(0, content:GetHeight() - self:GetHeight())
+        end
         local newScroll = current - (delta * 20)
         if newScroll < 0 then newScroll = 0 end
         if newScroll > maxScroll then newScroll = maxScroll end
@@ -223,7 +208,6 @@ function UI.CreateMainPanel()
         Sync.QueueAllPreviousLevels()
         UI.RefreshAll()
     end)
-    UI.AddStatusDot(sendBtn)
     frame.sendBtn = sendBtn
 
     local syncBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -301,18 +285,13 @@ function UI.RefreshMainPanel()
     if not frame or not frame:IsShown() then return end
 
     local bridge = ArchipelagoWoW_BridgeDB
-    local connected = bridge and bridge.connected
-    local statusStr
-    if connected then
-        statusStr = "|cff33ff33Connected|r"
-    elseif bridge and bridge.lastSyncEpoch then
-        statusStr = "|cffff4444Not connected|r"
-    else
-        statusStr = "|cff999999Unknown (bridge hasn't synced yet)|r"
-    end
-
     local syncedStr = Core.FormatRelativeTime(bridge and bridge.lastSyncEpoch)
-    local line = string.format("%s  -  synced %s (as of last sync, not live)", statusStr, syncedStr)
+    -- Explicit "\n", not a single line left to word-wrap on its own: the wrap point
+    -- depends on the rendered pixel width of syncedStr ("4s ago" vs "32s ago" vs "2h ago"
+    -- vs "never"), so a one-line version would inconsistently break mid-sentence depending
+    -- on which one happened to be current -- confirmed live, comparing screenshots seconds
+    -- apart. Forcing the break here keeps it at exactly two lines every time.
+    local line = string.format("Last synced %s\nClick Sync Now for the current state", syncedStr)
 
     local seedName = ArchipelagoWoWDB.session.seedName
     if seedName then
@@ -340,7 +319,6 @@ function UI.RefreshMainPanel()
 
     frame.statusText:SetText(line)
     UI.RefreshLogText(frame)
-    UI.RefreshConnectionTint()
 end
 
 function UI.ToggleMainPanel()
@@ -462,6 +440,7 @@ function UI.RefreshZonesPanel()
     if not frame or not frame:IsShown() then return end
 
     local bridge = ArchipelagoWoW_BridgeDB
+    if not bridge then return end
     local lines = {}
 
     local levelCap = bridge.currentLevelCap or 10
@@ -513,7 +492,6 @@ end
 -- ---------------------------------------------------------------------------
 
 function UI.RefreshAll()
-    UI.RefreshConnectionTint()
     if UI.mainPanel then UI.RefreshMainPanel() end
     if UI.zonesPanel then UI.RefreshZonesPanel() end
 end

@@ -98,8 +98,56 @@ function Sync.SyncNow()
     ReloadUI()
 end
 
--- Called by Core's PLAYER_LEVEL_UP handler. Only queues the level for the next
--- (manual) sync -- never schedules a reload itself. See file header.
-function Sync.OnLevelUp(level)
-    Sync.QueueLevel(level)
+-- Called by Core's PLAYER_LEVEL_UP handler. A single quest turn-in can grant more than
+-- one level at once (e.g. 36 -> 38 in one event) -- PLAYER_LEVEL_UP only ever fires with
+-- the level actually landed on, so without this, the skipped level(s) in between would
+-- only ever get sent via the manual "Send All Previous Levels" button, same as Level 01.
+-- Safe to back-queue automatically here (unlike QueueAllPreviousLevels): this is always
+-- the actual character live in this session actually crossing these levels right now, not
+-- a stale/wrong-slot's history, so there's no flood-send risk -- db.session.lastKnownLevel
+-- (seeded at login by Sync.OnLogin) bounds the backfill to only the levels genuinely
+-- skipped since the last level this addon actually saw.
+function Sync.OnLevelUp(newLevel)
+    newLevel = tonumber(newLevel)
+    if not newLevel then return end
+
+    local db = ArchipelagoWoWDB
+    if not db then return end
+
+    local from = (db.session.lastKnownLevel or (newLevel - 1)) + 1
+    for level = from, newLevel do
+        Sync.QueueLevel(level)
+    end
+    db.session.lastKnownLevel = newLevel
+end
+
+-- Called once at every login/reload (Core's PLAYER_LOGIN handler), before
+-- QueueStartingLevel. Seeds session.lastKnownLevel from the character's current level so
+-- OnLevelUp's skip-detection has a baseline to compare the next level-up against.
+-- Deliberately does NOT back-queue anything for a gap found here (e.g. this addon was only
+-- just installed on an already-level-40 character) -- that's pre-existing history, exactly
+-- what "Send All Previous Levels" exists to handle manually; only forward progress *after*
+-- this baseline is ever auto-queued.
+function Sync.OnLogin()
+    local db = ArchipelagoWoWDB
+    if not db then return end
+
+    local currentLevel = UnitLevel("player") or 1
+    if not db.session.lastKnownLevel or db.session.lastKnownLevel < currentLevel then
+        db.session.lastKnownLevel = currentLevel
+    end
+end
+
+-- Called once at every login/reload (Core's PLAYER_LOGIN handler). Level 1 has
+-- no PLAYER_LEVEL_UP event to react to -- every character simply starts there,
+-- with no "ding" -- so without this, "Level 01" could only ever be sent via
+-- the manual "Send All Previous Levels" button, unlike every other level.
+-- Safe to queue unconditionally on every login (unlike QueueAllPreviousLevels,
+-- which is deliberately manual-only to avoid flood-sending the wrong
+-- character's whole history): every character on every slot is always at
+-- least level 1, so this can never queue a check that doesn't actually apply.
+-- QueueLevel's own acked/pending guard keeps this idempotent after the first
+-- login.
+function Sync.QueueStartingLevel()
+    Sync.QueueLevel(1)
 end
