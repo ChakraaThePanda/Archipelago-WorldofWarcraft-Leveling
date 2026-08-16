@@ -168,7 +168,7 @@ class _Parser:
                 self._expect_punct("]")
                 self._expect_punct("=")
                 value = self.parse_value()
-                if not isinstance(key, (str, int)):
+                if not isinstance(key, (str, int)) or isinstance(key, bool):
                     raise LuaParseError(f"unsupported table key type: {key!r}")
                 result[key] = value
             elif tok[0] == "NAME" and tok[1] not in ("true", "false", "nil"):

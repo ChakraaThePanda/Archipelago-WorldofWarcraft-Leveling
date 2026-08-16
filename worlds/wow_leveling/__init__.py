@@ -235,6 +235,18 @@ class WoWLevelingWorld(World):
                     continue
                 if ("Pre-Cataclysm" in categories or "Post-Cataclysm" in categories) and cata_state_tag not in categories:
                     continue
+                # And to the chosen faction, for the zones/dungeons that are faction-locked
+                # in-game -- otherwise bracket_reachable() (Rules.py) could be satisfied by
+                # zone items the player can never actually quest in, since it only checks
+                # for *any* N unique zone items in the bracket's category, not that they're
+                # actually enterable by this faction. Every bracket retains at least 3
+                # same-faction-or-neutral zone items after this filter (verified across all
+                # expansion/cataclysm-state/faction combinations), comfortably above the
+                # max zones_needed of 2 (Easier Transitions).
+                if "Alliance" in categories and options.faction.value != options.faction.option_alliance:
+                    continue
+                if "Horde" in categories and options.faction.value != options.faction.option_horde:
+                    continue
 
             # Generic category -> yaml-option gating (currently just Dungeons -> include_dungeons).
             gated_options = [option for category in categories for option in CATEGORY_YAML_GATES.get(category, [])]
@@ -251,14 +263,18 @@ class WoWLevelingWorld(World):
 
         if len(pool) > total_locations:
             # Trim trailing filler-classified items first (e.g. dungeons, if included) to
-            # fit -- progression/useful items are never trimmed.
+            # fit -- progression/useful items are never trimmed. Built as a single reversed
+            # pass instead of repeated del(pool[index]) (each an O(n) shift) so this stays
+            # O(n) instead of O(n * excess).
             excess = len(pool) - total_locations
-            for index in range(len(pool) - 1, -1, -1):
-                if excess <= 0:
-                    break
-                if pool[index].classification == ItemClassification.filler:
-                    del pool[index]
+            trimmed: list[WoWLevelingItem] = []
+            for item in reversed(pool):
+                if excess > 0 and item.classification == ItemClassification.filler:
                     excess -= 1
+                    continue
+                trimmed.append(item)
+            trimmed.reverse()
+            pool = trimmed
 
         while len(pool) < total_locations:
             pool.append(self.create_item(FILLER_ITEM_NAME))

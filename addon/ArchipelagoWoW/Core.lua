@@ -15,7 +15,10 @@ local DB_DEFAULTS = {
         mainPanel = { point = "CENTER", relPoint = "CENTER", x = 0, y = 0, shown = false },
         zonesPanel = { point = "CENTER", relPoint = "CENTER", x = 0, y = 0, shown = false },
     },
-    session = { seedName = nil },
+    -- lastKnownLevel: the character level this addon last actually saw, used by
+    -- Sync.OnLevelUp to detect a multi-level jump (e.g. one quest turn-in granting 2
+    -- levels at once) and back-queue the level(s) in between, not just the one landed on.
+    session = { seedName = nil, lastKnownLevel = nil },
     pendingChecks = {},
     log = {},
 }
@@ -105,10 +108,10 @@ function Core.Reconcile()
     -- confusingly mixed in with the new room's activity (confirmed live: old entries from
     -- a previous room stayed visible indefinitely). Detected and reset before anything
     -- else below reads/mutates either.
-    local bridgeSeedName = bridge.seedName
-    if bridgeSeedName == nil and bridge.slotData then
-        bridgeSeedName = bridge.slotData.seedName
-    end
+    -- The bridge only ever writes seedName inside slotData (see
+    -- WoWLevelingClient.py's _translate_slot_data) -- there is no top-level
+    -- bridge.seedName key to fall back from.
+    local bridgeSeedName = bridge.slotData and bridge.slotData.seedName
     if bridgeSeedName ~= nil and db.session.seedName ~= nil and bridgeSeedName ~= db.session.seedName then
         db.pendingChecks = {}
         db.log = {}
@@ -205,6 +208,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- has already loaded its SavedVariables, so it's safe to reconcile now.
         Core.EnsureDB()
         Core.Reconcile()
+        if APW.Sync and APW.Sync.OnLogin then
+            APW.Sync.OnLogin()
+        end
+        if APW.Sync and APW.Sync.QueueStartingLevel then
+            APW.Sync.QueueStartingLevel()
+        end
         if APW.UI and APW.UI.OnLogin then
             APW.UI.OnLogin()
         end
