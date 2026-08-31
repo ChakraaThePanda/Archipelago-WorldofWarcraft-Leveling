@@ -4,16 +4,16 @@ from BaseClasses import Item, ItemClassification
 
 # Arbitrary but distinctive base -- check https://archipelago.gg (or the community ID
 # registry) for collisions with any other apworld you have installed before generating
-# alongside other games. Deliberately far from Northgard's own 39190000.
+# alongside other games.
 BASE_ID = 39280000
 
-# Every item this world can create, hardcoded here (not loaded from JSON/a data file) --
-# matching this project's other apworlds (Northgard, WEBFISHING). Ported faithfully from
-# the original Manual-based WorldofWarcraft-Leveling project's data/items.json (171 real
-# items, verified to match exactly) plus one added entry: Manual's engine synthesizes its
-# configured filler_item_name ("Did someone say [Thunderfury...]?!", see FILLER_ITEM_NAME
-# below) on the fly without it needing to be a real item.json entry, which a standalone
-# World can't do -- so it's listed explicitly here as entry #172, count 1, no category.
+# Every item this world can create, hardcoded here (not loaded from JSON/a data file).
+# Ported faithfully from the original Manual-based WorldofWarcraft-Leveling project's
+# data/items.json (171 real items, verified to match exactly) plus one added entry:
+# Manual's engine synthesizes its configured filler_item_name ("Did someone say
+# [Thunderfury...]?!", see FILLER_ITEM_NAME below) on the fly without it needing to be a
+# real item.json entry, which a standalone World can't do -- so it's listed explicitly here
+# as entry #172, count 1, no category.
 _RAW_ITEMS: list[dict] = [
     {'count': 10, 'name': 'Gold', 'category': ['Gold'], 'progression': True},
     {'count': 1, 'name': 'Maximum Level 20', 'category': ['Maximum Levels', 'Sequential Levels', 'Vanilla'], 'progression': True},

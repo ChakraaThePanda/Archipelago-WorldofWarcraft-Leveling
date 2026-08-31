@@ -31,9 +31,9 @@ reported to the server -- nothing needs to be done manually to "declare" you've 
 ## What items and locations get shuffled?
 
 - One location per character level, "Level 01" through the max level for your chosen
-  expansion, checked the moment you reach that level.
-- Two goal locations, "Leveling" and "Gold Hunt", both always present regardless of which
-  goal you picked -- only your chosen goal actually needs to be reached to win.
+  expansion, checked the moment you reach that level. There is no separate location for
+  the goal itself -- reaching it is detected from your level/gold state directly (see
+  above) and reported to the server without needing a location check.
 - The item pool is built from: Gold (Gold Hunt only), level-cap items (Sequential or
   Progressive, matching your "Level Items" choice), one unlock item per leveling zone
   (filtered to your chosen expansion, faction, and Pre/Post-Cataclysm setting), a class and

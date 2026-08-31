@@ -2,18 +2,20 @@ from dataclasses import dataclass
 
 from BaseClasses import Location
 
-# Deliberately distinct from Items.BASE_ID so item and location IDs never collide, matching
-# the Northgard convention (its own BASE_ID is reused for both tables with a +1000 offset).
+# Deliberately distinct from Items.BASE_ID so item and location IDs never collide.
 BASE_ID = 39280000
 _LOCATION_ID_OFFSET = 1000
 
-# Every location this world can create, hardcoded here (not loaded from JSON/a data file) --
-# matching this project's other apworlds (Northgard, WEBFISHING). Ported faithfully from
-# the original Manual-based WorldofWarcraft-Leveling project's data/locations.json (all 92
-# entries, verified to match exactly): one "Level NN" check per character level plus the
-# two always-present goal checks, "Leveling" and "Gold Hunt" (renamed from the original
-# "Gold_Hunt" -- the underscore was only ever a Manual-engine naming requirement, not
-# meaningful game content, so there's no reason to keep it in a standalone World).
+# Every location this world can create, hardcoded here (not loaded from JSON/a data file).
+# Ported from the original Manual-based WorldofWarcraft-Leveling project's
+# data/locations.json, one "Level NN" check per character level -- minus that source's two
+# "Leveling"/"Gold_Hunt" goal checks, which this World deliberately does not carry over:
+# neither is anything the addon can detect a check for (the goal condition is inferred
+# purely from addon-reported level/gold state, see WoWLevelingClient._maybe_send_goal), so
+# they'd only ever be real locations that a live game can never actually complete. Goal
+# completion instead fires directly off that inferred state via StatusUpdate(CLIENT_GOAL),
+# independent of any location check; the locked "Victory" event location (below) still
+# exists purely to drive multiworld completion logic.
 _RAW_LOCATIONS: list[dict] = [
     {'name': 'Level 01', 'region': 'Levels 01-10'},
     {'name': 'Level 02', 'region': 'Levels 01-10'},
@@ -105,8 +107,6 @@ _RAW_LOCATIONS: list[dict] = [
     {'name': 'Level 88', 'region': 'Levels 86-90'},
     {'name': 'Level 89', 'region': 'Levels 86-90'},
     {'name': 'Level 90', 'region': 'Levels 86-90'},
-    {'name': 'Leveling', 'region': 'Leveling'},
-    {'name': 'Gold Hunt', 'region': 'Gold Hunt'},
 ]
 
 
@@ -121,12 +121,9 @@ class LocationData:
 
 
 # Location IDs follow _RAW_LOCATIONS' own order, same stability rationale as Items.py.
-# All 92 locations (90 "Level NN" checks + the 2 goal checks) are pre-declared here so
-# location_name_to_id is stable regardless of which expansion/goal is chosen at generation
-# time -- only a subset is actually placed into regions in a given seed (see __init__.py).
-# The two goal locations are looked up by name (LEVELING_LOCATION_NAME/
-# GOLD_HUNT_LOCATION_NAME below), not by any per-entry flag, since there are always
-# exactly two and never a variable set to filter for.
+# All 90 "Level NN" locations are pre-declared here so location_name_to_id is stable
+# regardless of which expansion is chosen at generation time -- only a subset is actually
+# placed into regions in a given seed (see __init__.py).
 location_table: dict[str, LocationData] = {
     entry["name"]: LocationData(
         BASE_ID + _LOCATION_ID_OFFSET + index,
@@ -134,9 +131,6 @@ location_table: dict[str, LocationData] = {
     )
     for index, entry in enumerate(_RAW_LOCATIONS)
 }
-
-LEVELING_LOCATION_NAME = "Leveling"
-GOLD_HUNT_LOCATION_NAME = "Gold Hunt"
 
 # The event location holding the locked "Victory" item. It is NOT part of location_table:
 # it has no id, is never sent over the network, and only exists so
