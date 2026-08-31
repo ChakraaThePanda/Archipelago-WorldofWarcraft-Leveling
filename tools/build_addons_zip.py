@@ -1,7 +1,6 @@
 """
 Packages addon/ArchipelagoWoW and addon/ArchipelagoWoW_Bridge into addons.zip for a
-release -- the equivalent, for this project, of WEBFISHING's root-level
-mwmw.Archipelago.zip: a ready-to-download bundle a player unzips directly into their WoW
+release: a ready-to-download bundle a player unzips directly into their WoW
 installation's Interface/AddOns folder, no build step of their own required.
 
 Usage:

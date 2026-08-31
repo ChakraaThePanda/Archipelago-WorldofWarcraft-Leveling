@@ -16,8 +16,8 @@ disk:
 
 NOTE: this client connects to the Archipelago server the same way any other Archipelago
 client does -- its own console/GUI (e.g. `/connect host:port`, or the GUI's connect
-fields), same as Northgard's client. There is deliberately no server-address/slot/
-password configuration on the addon side at all (that was tried and reverted -- see
+fields). There is deliberately no server-address/slot/password configuration on the
+addon side at all (that was tried and reverted -- see
 addon/README.md) -- the two things are independent: which AP *server/slot* you're
 connected to is decided here, in this process, exactly like every other AP client;
 which WoW *character* this process reads/writes SavedVariables for is a completely
@@ -32,12 +32,10 @@ client's whole job is to poll ArchipelagoWoWDB's mtime (every POLL_INTERVAL_SECO
 react whenever it changes. Do not add filesystem-event watching or chat-log tailing here;
 that idea was explicitly floated and explicitly deferred to a separate future experiment.
 
-Structure/launch() pattern and CommonClient usage cloned from the same author's working
-Northgard client (worlds/northgard/NorthgardClient.py in the Archipelago-Northgard repo)
--- server_loop/CommonContext/ClientCommandProcessor/get_base_parser/gui_enabled are all
-used exactly the same way. This module is loaded by worlds/wow_leveling/__init__.py via
-`from .WoWLevelingClient import launch as Main`, mirroring worlds/northgard/__init__.py's
-`from .NorthgardClient import launch as Main`.
+Structure/launch() pattern built on the standard Archipelago CommonClient usage --
+server_loop/CommonContext/ClientCommandProcessor/get_base_parser/gui_enabled are all used
+the normal way. This module is loaded by worlds/wow_leveling/__init__.py via
+`from .WoWLevelingClient import launch as Main`.
 
 WHICH CHARACTER: a WoW install can have many <Account>/<Realm>/<Character> combinations
 under WTF/Account/ -- on a machine used for more than one throwaway test character (or
@@ -91,11 +89,7 @@ from .Items import (
     PROGRESSIVE_LEVELS_ITEM_NAME as _PROGRESSIVE_LEVELS_ITEM_NAME,
     SEQUENTIAL_LEVEL_ITEMS as _SEQUENTIAL_LEVEL_ITEMS,
 )
-from .Locations import (
-    location_table as _location_table,
-    GOLD_HUNT_LOCATION_NAME as _GOLD_HUNT_LOCATION_NAME,
-    LEVELING_LOCATION_NAME as _LEVELING_LOCATION_NAME,
-)
+from .Locations import location_table as _location_table
 from .Options import Goal as _GoalOption, Faction as _FactionOption, EXPANSION_NAMES as _EXPANSION_NAMES
 from .Regions import BRACKET_MAX_LEVEL as _BRACKET_MAX_LEVEL
 
@@ -144,13 +138,11 @@ _LEVEL_LOCATION_RE = re.compile(r"^Level (\d+)$")
 # Item -> bridge-bucket classification, and id<->name translation.
 #
 # This client ships inside the same apworld package as Items.py/Locations.py -- imported
-# read-only here, exactly the way Northgard's own NorthgardClient.py imports its sibling
-# Items.py/Locations.py for the same reason -- so translating AP's numeric item/location
-# ids to/from names, and classifying an item name
-# into 'zone'/'level_item', can both be done directly from this game's own local
-# tables rather than round-tripping through the network DataPackage -- simpler and
-# available immediately (no "hasn't arrived yet" race), and it's exactly Northgard's
-# precedent. item_name_groups (Zones/Dungeons/Classes) exists on Items.py but is a
+# read-only here, so translating AP's numeric item/location ids to/from names, and
+# classifying an item name into 'zone'/'level_item', can both be done directly from this
+# game's own local tables rather than round-tripping through the network DataPackage --
+# simpler and available immediately (no "hasn't arrived yet" race). item_name_groups
+# (Zones/Dungeons/Classes) exists on Items.py but is a
 # World-authoring/generation-time concept never sent over the wire -- data.category
 # tuples (also local, also authoritative) serve the same purpose here.
 # ---------------------------------------------------------------------------
@@ -249,8 +241,7 @@ def _translate_slot_data(slot_data: dict, seed_name: typing.Optional[str]) -> di
 
 
 # ---------------------------------------------------------------------------
-# Local config (per-machine WoW install path) -- modeled on Northgard's save_state.py /
-# NorthgardClient.py client_config.json convention: a small JSON file under the real
+# Local config (per-machine WoW install path): a small JSON file under the real
 # Windows "Saved Games" folder (survives a WoW reinstall/relocation, unlike anything
 # stored inside the WoW install itself), resolved once via SHGetKnownFolderPath so a
 # redirected Saved Games folder (another drive, etc.) is still found correctly.
@@ -626,7 +617,7 @@ class WoWLevelingContext(CommonContext):
         self.gold_count: int = 0
         self.incoming_log: typing.List[dict] = []
         # Set once _maybe_send_goal has sent StatusUpdate(CLIENT_GOAL) -- guards against
-        # resending it every poll tick, mirroring Northgard's own ctx.finished_game.
+        # resending it every poll tick.
         self.goal_sent: bool = False
         # How many entries of self.items_received (the base CommonContext's own complete,
         # already-deduplicated received-items list) have already been folded into
@@ -681,9 +672,8 @@ class WoWLevelingContext(CommonContext):
         elif cmd == "ConnectionRefused":
             logger.warning(f"[WoW Leveling] Server refused the connection: {args.get('errors')}")
         elif cmd == "ReceivedItems":
-            # entry is a NetUtils.NetworkItem (NamedTuple) -- attribute access, not .get()
-            # (same pattern as NorthgardClient's ReceivedItems handling). self.items_received
-            # is the base CommonContext's own complete, already-deduplicated list (it can
+            # entry is a NetUtils.NetworkItem (NamedTuple) -- attribute access, not .get().
+            # self.items_received is the base CommonContext's own complete, already-deduplicated list (it can
             # legitimately be resent in full from index 0 on every reconnect) -- unlocked_zones
             # /level_item_counts are recomputed from that full list every time rather than
             # incrementally mutated off args["items"], since level_item_counts is a running
@@ -788,38 +778,29 @@ def _acked_levels(ctx: WoWLevelingContext) -> typing.Dict[int, bool]:
 
 async def _maybe_send_goal(ctx: WoWLevelingContext) -> None:
     """Detects whether the chosen goal has actually been met in-game and, the first time it
-    has, checks the corresponding location -- "Leveling" or "Gold Hunt" (see Locations.py) --
-    and sends StatusUpdate(CLIENT_GOAL), the same pattern Northgard's own client uses for its
-    "Chapter 07" goal check (NorthgardClient.py's save_watcher). Unlike the World's separate
-    id=None "Victory" event location (never delivered over the network to any client, so
-    there is nothing to react to there), "Leveling"/"Gold Hunt" are ordinary real locations
-    with real ids -- so, exactly like any other location, nothing marks them checked unless
-    a client actually sends a LocationChecks for them. Without this function that never
-    happens for either one, and the world could never actually be "won" in a live game even
-    after truly reaching max level or collecting enough Gold -- confirmed missing entirely
-    until this was added."""
+    has, sends StatusUpdate(CLIENT_GOAL). There is no "Leveling"/"Gold Hunt" location to
+    check here (the World deliberately doesn't declare either -- see
+    Locations.py): the addon has no way to report a check for either condition, so goal
+    completion is inferred entirely from addon-reported level/gold state and reported
+    directly, independent of any location. Without this function that report never happens,
+    and the world could never actually be "won" in a live game even after truly reaching max
+    level or collecting enough Gold -- confirmed missing entirely until this was added."""
     if ctx.goal_sent or ctx.server is None:
         return
 
     slot_data = ctx.slot_data or {}
     goal = slot_data.get("goal")
 
-    location_name: typing.Optional[str] = None
+    goal_met = False
     if goal == _GoalOption.option_leveling:
         max_level = slot_data.get("max_level")
-        if isinstance(max_level, int) and _acked_levels(ctx).get(max_level):
-            location_name = _LEVELING_LOCATION_NAME
+        goal_met = isinstance(max_level, int) and bool(_acked_levels(ctx).get(max_level))
     elif goal == _GoalOption.option_gold_hunt:
         amount = slot_data.get("gold_hunt_amount")
-        if isinstance(amount, int) and amount > 0 and ctx.gold_count >= amount:
-            location_name = _GOLD_HUNT_LOCATION_NAME
+        goal_met = isinstance(amount, int) and amount > 0 and ctx.gold_count >= amount
 
-    if location_name is None:
+    if not goal_met:
         return  # goal not met yet
-
-    loc_id = _LOCATION_NAME_TO_ID.get(location_name)
-    if loc_id is not None and loc_id not in ctx.checked_locations:
-        await ctx.send_msgs([{"cmd": "LocationChecks", "locations": [loc_id]}])
 
     ctx.goal_sent = True
     await ctx.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
@@ -1002,7 +983,7 @@ def launch() -> None:
     # name and a literal "--" separator ahead of any real args (e.g. `ArchipelagoLauncher.exe
     # "WoW Leveling Client" -- --nogui host:port`); left in place, argparse would treat
     # everything after "--" as forced-positional-only and silently swallow flags like
-    # --nogui. Stripped the same way NorthgardClient.launch() strips "Northgard Client"/"--".
+    # --nogui, so both are stripped here first.
     # The exact string below was confirmed against __init__.py's actual
     # Component("WoW Leveling Client", ...) registration, not guessed.
     if "WoW Leveling Client" in cli_args:

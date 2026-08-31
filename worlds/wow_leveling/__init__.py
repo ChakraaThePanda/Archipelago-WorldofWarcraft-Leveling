@@ -19,8 +19,6 @@ from .Items import (
     item_table,
 )
 from .Locations import (
-    GOLD_HUNT_LOCATION_NAME,
-    LEVELING_LOCATION_NAME,
     VICTORY_EVENT_LOCATION_NAME,
     WoWLevelingLocation,
     location_table,
@@ -34,7 +32,7 @@ def launch_client(*args) -> None:
     # *args exists only so this matches the signature Component.run() always calls
     # (self.func(*args) -- args is non-empty when the Launcher is invoked with extra CLI
     # tokens after "--", e.g. a url). Not forwarded further: the client reads sys.argv
-    # itself (see WoWLevelingClient.launch), same as Northgard's own launch_client.
+    # itself (see WoWLevelingClient.launch).
     from CommonClient import gui_enabled
     from .WoWLevelingClient import launch as Main
 
@@ -130,25 +128,11 @@ class WoWLevelingWorld(World):
 
         # Level-up locations, trimmed to this expansion's max level.
         for name, data in location_table.items():
-            if name in (LEVELING_LOCATION_NAME, GOLD_HUNT_LOCATION_NAME):
-                continue
             level = int(name.split(" ")[1])
             if level > max_level:
                 continue
             region = regions[data.region]
             region.locations.append(WoWLevelingLocation(player, name, data.id, region))
-
-        # The two goal locations always exist, regardless of which `goal` was chosen --
-        # only the completion condition (set_rules(), below) depends on that choice.
-        leveling_data = location_table[LEVELING_LOCATION_NAME]
-        leveling_region.locations.append(
-            WoWLevelingLocation(player, LEVELING_LOCATION_NAME, leveling_data.id, leveling_region)
-        )
-
-        gold_hunt_data = location_table[GOLD_HUNT_LOCATION_NAME]
-        gold_hunt_region.locations.append(
-            WoWLevelingLocation(player, GOLD_HUNT_LOCATION_NAME, gold_hunt_data.id, gold_hunt_region)
-        )
 
         # A locked "Victory" event, placed in whichever goal region matches the chosen
         # `goal` option -- reachable exactly when that region's own entrance rule is
