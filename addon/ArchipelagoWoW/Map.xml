@@ -1,0 +1,60 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Script file="Map.lua"/>
+
+    <!-- Mirrors Blizzard_SharedMapDataProviders/MapHighlightDataProvider.xml's
+         MapHighlightPinTemplate (same ARTWORK-layer, ADD-blended texture) -- confirmed
+         live that BLEND is wrong for this asset: the highlight art is an opaque-background
+         additive "glow" image, not an alpha-cutout shape, so BLEND paints its whole
+         rectangular bounds as a solid black box. ADD is correct (the black background
+         truly contributes nothing), it's just dim by the asset's own design, so this
+         stacks 6 identical additive copies to make the red read boldly without ever
+         risking that box -- see Map.lua's Redraw(). (Confirmed live on the legacy-client
+         counterpart, MapLegacy.lua, that 3 reads clearly on Kalimdor/Eastern Kingdoms'
+         warm palette but stays faint on Northrend's cooler ice/snow tones; doubled since
+         more ADD layers is a pure, safe brightness increase.)
+
+         Known, accepted limitation of this version: a handful of zones' own highlight art
+         is a small glow near the zone's label rather than something covering the whole
+         zone, so those don't get tinted at all. Tried three shape-derived alternatives
+         (one bounding box per zone, one strip per scan row, one tile per scan point) that
+         all covered every zone completely -- confirmed live each looked worse in a
+         different way (fused-together overlapping zones, or a busy checkerboard texture)
+         than this version's partial-but-clean coverage. Reverted back to this on purpose;
+         do not re-attempt those without new information that changes the trade-off. -->
+    <Frame name="APWLockedZoneHighlightPinTemplate" mixin="APWLockedZoneHighlightPinMixin" virtual="true">
+        <Layers>
+            <Layer level="ARTWORK">
+                <Texture parentKey="HighlightTexture1" alphaMode="ADD" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+                <Texture parentKey="HighlightTexture2" alphaMode="ADD" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+                <Texture parentKey="HighlightTexture3" alphaMode="ADD" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+                <Texture parentKey="HighlightTexture4" alphaMode="ADD" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+                <Texture parentKey="HighlightTexture5" alphaMode="ADD" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+                <Texture parentKey="HighlightTexture6" alphaMode="ADD" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+        </Layers>
+    </Frame>
+</Ui>

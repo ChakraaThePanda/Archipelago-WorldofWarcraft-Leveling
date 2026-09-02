@@ -140,6 +140,43 @@ function Zones.GetCategory(itemName)
     return Zones.ZONE_TO_CATEGORY[itemName] or Zones.OTHER_BUCKET
 end
 
+-- Derived from ZONE_TO_CATEGORY: real in-game zone name (the level-range suffix
+-- stripped off) -> array of AP item name variants for that same physical zone. There
+-- can be more than one variant per real zone name -- the Pre-Cataclysm and
+-- Post-Cataclysm item names for the same physical zone (e.g. "Redridge Mountains
+-- (15-20)" and "Redridge Mountains (15-25)") both strip down to the same in-game name,
+-- "Redridge Mountains", which is exactly what C_Map.GetMapInfo(mapID).name reports for
+-- it regardless of which Cataclysm phase is active. Built for Map.lua, which needs to
+-- go from a zone name reported by the World Map API back to the AP item name(s) that
+-- gate it.
+Zones.ZONE_DISPLAY_NAME_TO_ITEMS = {}
+for itemName in pairs(Zones.ZONE_TO_CATEGORY) do
+    local displayName = itemName:match("^(.-)%s*%(%d+%-%d+%)$") or itemName
+    local list = Zones.ZONE_DISPLAY_NAME_TO_ITEMS[displayName]
+    if not list then
+        list = {}
+        Zones.ZONE_DISPLAY_NAME_TO_ITEMS[displayName] = list
+    end
+    table.insert(list, itemName)
+end
+
+-- Returns true if NONE of the item-name variants for the given real zone name (as
+-- reported by C_Map.GetMapInfo(mapID).name) have been unlocked yet, false if at least
+-- one has, or nil if `displayName` isn't a zone this addon knows how to track at all
+-- (an unrecognized/future zone) -- callers should treat nil as "leave it alone" rather
+-- than as locked, the same way Zones.GetCategory falls back to OTHER_BUCKET instead of
+-- guessing.
+function Zones.IsZoneNameLocked(displayName, unlockedMap)
+    local items = Zones.ZONE_DISPLAY_NAME_TO_ITEMS[displayName]
+    if not items then return nil end
+    for _, itemName in ipairs(items) do
+        if unlockedMap and unlockedMap[itemName] then
+            return false
+        end
+    end
+    return true
+end
+
 -- Groups a map[itemName]=true table into an ordered array of
 -- { category = <string>, items = { <sorted item names> } }, skipping
 -- categories with no unlocked items.

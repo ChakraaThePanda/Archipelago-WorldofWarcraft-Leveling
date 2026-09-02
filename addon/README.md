@@ -36,7 +36,7 @@ fields: the Archipelago connection lives entirely in the separate bridge
 program, connected the same way as any other Archipelago client (its own
 console/GUI, e.g. `/connect host:port`). Which WoW character the bridge
 reads/writes is resolved on the bridge side (see the "Which character" note
-in WoWLevelingClient.py and its `/wowchar` command), not configured from
+in WoWLevelingClient.py and its `/wow` command), not configured from
 in-game. And syncing is manual-only (see "Sync model" below) -- no auto-sync
 toggle/delay to configure either.
 
@@ -59,7 +59,7 @@ bridge to find.
 This pattern -- external companion app + SavedVariables + periodic
 `ReloadUI()` to sync -- is the same one used by long-established, proven-safe
 WoW tools such as WeakAuras Companion and TradeSkillMaster's desktop app: no
-memory reading, no packet injection, zero ban risk on retail.
+memory reading, no packet injection, zero ban risk.
 
 ## Sync model
 
@@ -119,35 +119,56 @@ open/closed value to be read *before* `CreateMainPanel`/`CreateZonesPanel` run, 
 freshly created frame is shown by default, so their own `frame:Hide()` call fires
 `OnHide` and would otherwise clobber the persisted value first.
 
-## Multi-version packaging
+## Supported scope
 
-Both folders use the standard multi-TOC packaging convention (one shared set
-of `.lua` files, several `.toc` files differing only by `## Interface:`):
+This project targets the original, live-service WoW client patches from Vanilla
+through Mists of Pandaria (2004-2013), the actual old game as it's still run today via
+private-server emulation (AzerothCore, TrinityCore, and similar). It does **not**
+target Blizzard's 2019+ "WoW Classic" rerelease product line, and it does not target
+retail. Those are different software with different, incompatible Interface numbers
+from the ones this addon targets, so loading this on a Blizzard Classic or retail
+client is out of scope and unsupported (it may or may not happen to work).
 
-| TOC file suffix | Client flavor | Interface number | Source |
-| --- | --- | --- | --- |
-| *(none)* | Retail / Mainline | 120007 | `TomTom.toc` / `TomTom_Mainline.toc`, installed under `_retail_` |
-| `_Wrath` | Wrath Classic | 30300 | Matches the local AzerothCore 3.3.5a test client (`ElvUI.toc`, `Questie-335.toc` installed there both target 30300) |
-| `_Vanilla` | Classic Era | 11508 | `TomTom_Vanilla.toc` |
-| `_Cata` | Cataclysm Classic | 40401 | `TomTom_Cata.toc` |
+## One .toc for every expansion
 
-Note on the Wrath number: official Blizzard "WotLK Classic" (the
-currently-sold Battle.net service) reports interface `30403` (see
-`Questie-WOTLKC.toc`, also installed locally). This project's only real test
-client is the local AzerothCore 3.3.5a server, which -- like every other addon
-already installed there -- expects `30300`. If you ever target the official
-Blizzard WotLK Classic service instead, bump `ArchipelagoWoW_Wrath.toc` (and
-its Bridge counterpart) to `30403`, or ship a second `_WrathClassic` TOC pair
-for it and check "Load out of date AddOns" isn't otherwise needed.
+Each folder ships a single `<AddonName>.toc`, pinned to `## Interface: 30300` (Wrath of
+the Lich King 3.3.5a), independently confirmed against the local AzerothCore 3.3.5a test
+client, where every other addon already installed (`ElvUI.toc`, `Questie-335.toc`) also
+targets `30300`.
 
-Client-flavor branching in the Lua code itself (see `Compat.lua`) is done only
-by comparing `WOW_PROJECT_ID` against Blizzard's named globals
-(`WOW_PROJECT_MAINLINE`, `WOW_PROJECT_CLASSIC`,
-`WOW_PROJECT_BURNING_CRUSADE_CLASSIC`, `WOW_PROJECT_WRATH_CLASSIC`,
-`WOW_PROJECT_CATACLYSM_CLASSIC`, ...), never hardcoded numeric IDs. Note that
-on the local AzerothCore 3.3.5a client specifically, `WOW_PROJECT_ID` isn't
-defined as a real global at all (confirmed by the fact that Questie has to
-build its own compatibility shim with hardcoded IDs for that environment) --
-`Compat.lua` treats that as the same "legacy client" fallback as any other
-pre-Legion-API client, which is the correct behavior for it anyway (no
-`BackdropTemplate`, legacy backdrop methods).
+That one file is enough for every expansion in scope, not just Wrath, because nothing in
+the Lua code branches on the `.toc`'s declared Interface number at all. `Compat.lua`
+checks whether a given global actually exists right now (`C_Map ~= nil`,
+`BackdropTemplateMixin ~= nil`), which gives the correct answer on whichever original
+client is actually running, Vanilla through Mists, regardless of what the `.toc` claims.
+The Interface field only ever controls one thing client-side: whether the addon shows as
+"out of date" (and is hidden by default) in the AddOns list on a client whose own build
+number doesn't match it. If that happens, checking "Load out of date AddOns" in that
+list (a checkbox that's existed since Vanilla) makes it load and run exactly the same as
+on Wrath; there's no separate file to swap in for a different expansion.
+
+Earlier revisions of this addon shipped a `_<Flavor>.toc` per expansion (one per TOC file
+suffix Blizzard's own modern client understands), on the mistaken assumption that an
+original-era client would pick the right one automatically. It doesn't: that
+flavor-suffix convention, and the newer comma-separated `## Interface: a, b, c` list some
+retail addons use for the same purpose, are both features of Blizzard's modern (2021+ and
+2024+, respectively) client codebase, which a genuine pre-Legion original client, or a
+private server emulating one, predates entirely and has no concept of at all. Those extra
+files were removed rather than kept as dead weight; this single `.toc` is the whole story
+now.
+
+There's deliberately no `WrathClassic`/`30403` variant for Blizzard's official WotLK
+Classic rerelease (see "Supported scope" above): that's a different, out-of-scope product
+with its own separate interface numbering, not something this addon claims to support.
+
+The Lua code itself (see `Compat.lua`) never branches on client flavor or
+`WOW_PROJECT_ID` at all, only on the actual API surface (does this global/mixin
+exist right now?). That's not just a style preference: `WOW_PROJECT_ID` and every
+`WOW_PROJECT_*` named global were only added in patch 7.0 (Legion, 2016), so they
+don't exist at all on a genuine original-era client, or on the local AzerothCore
+3.3.5a test client (confirmed by the fact that Questie has to build its own
+compatibility shim with hardcoded IDs for that environment), which describes every
+client this addon actually targets. `Compat.lua` treats the absence of those modern
+globals as the normal case rather than a fallback, which is the correct behavior for
+every client in scope here (no `BackdropTemplate`, no `C_Map`, legacy backdrop
+methods).

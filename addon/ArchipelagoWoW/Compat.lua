@@ -1,45 +1,37 @@
 -- ArchipelagoWoW: Compat.lua
--- Cross-version compatibility helpers. This is the only file that should ever
--- branch on client flavor. Everything else calls into APW.Compat instead of
--- checking WOW_PROJECT_ID directly.
+-- Cross-version compatibility helpers. This is the only file that should ever branch
+-- on API surface.
 --
--- IMPORTANT: never hardcode the numeric WOW_PROJECT_ID values. Always compare
--- against Blizzard's own named globals (WOW_PROJECT_MAINLINE, WOW_PROJECT_CLASSIC,
--- WOW_PROJECT_BURNING_CRUSADE_CLASSIC, WOW_PROJECT_WRATH_CLASSIC,
--- WOW_PROJECT_CATACLYSM_CLASSIC, ...) since those resolve correctly on every
--- client build. On some non-Blizzard 3.3.5 client builds WOW_PROJECT_ID does not
--- exist at all (it's nil) -- all the checks below are written to fail safe (false)
--- in that case, and Compat.IsLegacyClient below picks up the fallback.
+-- Supported scope is the original, live-service client patches for Vanilla through
+-- Mists of Pandaria (2004-2013), meaning the actual old game as it's still run today
+-- via private-server emulation (AzerothCore, TrinityCore, and similar), not Blizzard's
+-- 2019+ "WoW Classic" rerelease product line. The shipped .toc files are the real
+-- scope boundary, since each is pinned to that expansion's original final-patch
+-- Interface number (see addon/README.md's table) rather than a modern Classic-rerelease
+-- one.
+--
+-- That distinction matters here because WOW_PROJECT_ID (and every WOW_PROJECT_*
+-- named global) was only added for WoW Classic's 2019 launch (patch 8.1.5), so it does
+-- not exist at all on a genuine original-era client, or on a private server emulating
+-- one, which is every client this addon actually targets. So this file deliberately
+-- does not branch on WOW_PROJECT_ID or client flavor anywhere; every check below reads
+-- the actual API surface instead (does this global/mixin exist right now?), which gives
+-- the correct answer both for the real target (nothing beyond what an original client
+-- ever exposed) and, harmlessly, for anyone who loads this out of scope on a modern
+-- client anyway.
 
 local ADDON_NAME, APW = ...
 
 APW.Compat = APW.Compat or {}
 local Compat = APW.Compat
 
-local function isProject(namedGlobal)
-    return WOW_PROJECT_ID ~= nil and namedGlobal ~= nil and WOW_PROJECT_ID == namedGlobal
-end
+-- True on a genuine original-era client, and false on any modern client, in or out of
+-- scope; see Map.lua/MapLegacy.lua, which pick their implementation off this flag.
+Compat.HasModernMapAPI = C_Map ~= nil
 
-Compat.IsMainline = isProject(WOW_PROJECT_MAINLINE)
-Compat.IsVanilla = isProject(WOW_PROJECT_CLASSIC)
-Compat.IsBCC = isProject(WOW_PROJECT_BURNING_CRUSADE_CLASSIC)
-Compat.IsWrath = isProject(WOW_PROJECT_WRATH_CLASSIC)
-Compat.IsCata = isProject(WOW_PROJECT_CATACLYSM_CLASSIC)
-Compat.IsMists = isProject(WOW_PROJECT_MISTS_CLASSIC)
-
--- True when WOW_PROJECT_ID isn't defined at all (older/unofficial 3.3.5-era client
--- builds predate that global) or didn't match anything named above. Treated the
--- same as "old client" for API-availability purposes: no BackdropTemplate mixin,
--- assume legacy widget behavior.
-Compat.IsLegacyClient = not (Compat.IsMainline or Compat.IsVanilla or Compat.IsBCC or Compat.IsCata or Compat.IsMists)
-
--- Detected off the actual API surface (whether the BackdropTemplate mixin
--- exists at all) rather than off client flavor: Blizzard has periodically
--- rebased later Classic-family content-phase clients onto the same
--- modernized frame codebase as retail, which can require the mixin there too
--- even though WOW_PROJECT_ID still reports a Classic project. A frame that
--- doesn't need the mixin already has backdrop methods built into the base
--- Frame widget, so BackdropTemplateMixin being absent is the correct signal.
+-- Whether a frame needs the BackdropTemplate mixin to get SetBackdrop/backdrop methods
+-- at all. It's absent entirely on the original clients this addon targets, since those
+-- already have those methods built into the base Frame widget.
 Compat.NeedsBackdropTemplate = BackdropTemplateMixin ~= nil
 
 -- Creates a frame, adding the BackdropTemplate mixin only where required.
@@ -61,8 +53,8 @@ function Compat.SetBackdrop(frame, backdrop)
     end
 end
 
--- Shared basic panel backdrop definition (dialog-box style border, works on both
--- retail-with-mixin and classic-native backdrop implementations).
+-- Shared basic panel backdrop definition (dialog-box style border, works via the
+-- original client's native backdrop methods without needing BackdropTemplate).
 Compat.PANEL_BACKDROP = {
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -72,9 +64,9 @@ Compat.PANEL_BACKDROP = {
     insets = { left = 11, right = 12, top = 12, bottom = 11 },
 }
 
--- SetMinResize/SetMaxResize were replaced by a single SetResizeBounds call in retail
--- (10.0+); every Classic-family client (and any client where WOW_PROJECT_ID isn't even
--- defined) only has the older pair.
+-- SetMinResize/SetMaxResize were replaced by a single SetResizeBounds call in much
+-- later (10.0+) clients; every original-era client this addon targets only has the
+-- older pair.
 function Compat.SetResizeBounds(frame, minWidth, minHeight, maxWidth, maxHeight)
     if frame.SetResizeBounds then
         frame:SetResizeBounds(minWidth, minHeight, maxWidth, maxHeight)

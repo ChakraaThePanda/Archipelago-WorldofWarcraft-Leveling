@@ -1,8 +1,0 @@
-## Interface: 11508
-## Title: Archipelago WoW |cff888888(Bridge Sidecar)|r
-## Notes: Sidecar addon that owns the SavedVariables file written directly by the external Archipelago bridge program. Do not edit its data; ArchipelagoWoW only reads it.
-## Author: WoW Leveling Archipelago Project
-## Version: 0.1.0
-## SavedVariablesPerCharacter: ArchipelagoWoW_BridgeDB
-
-Bridge.lua
