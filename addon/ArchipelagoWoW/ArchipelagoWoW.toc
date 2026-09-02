@@ -1,4 +1,4 @@
-## Interface: 120007
+## Interface: 30300
 ## Title: Archipelago WoW
 ## Notes: Archipelago multiworld randomizer client addon. Reports level-up checks and displays received items via the ArchipelagoWoW_Bridge companion addon and an external bridge program.
 ## Author: WoW Leveling Archipelago Project
@@ -12,3 +12,5 @@ Core.lua
 Zones.lua
 Sync.lua
 UI.lua
+Map.xml
+MapLegacy.lua

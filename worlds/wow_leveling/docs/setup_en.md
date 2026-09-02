@@ -3,8 +3,9 @@
 ## Required Software
 
 - [Archipelago](https://github.com/ArchipelagoMW/Archipelago/releases)
-- World of Warcraft, any client version that matches the expansion you intend to play
-  (your `expansion` YAML option should match what you're actually leveling in)
+- World of Warcraft Classic for the expansion you intend to play (Classic Era through Mists
+  of Pandaria Classic). Retail also works (your `expansion` YAML option should match what
+  you're actually leveling in)
 - The `wow_leveling.apworld` file, installed like any other apworld
 - This repository's `addon/` folder (two addon folders, described below)
 
@@ -42,25 +43,28 @@ drop your target/casting at a dangerous moment, so nothing ever reloads the UI o
    `Interface/AddOns/ArchipelagoWoW_Bridge/...` side by side) -- or copy both
    `addon/ArchipelagoWoW` and `addon/ArchipelagoWoW_Bridge` there yourself if you're working
    from source instead. Both folders are required -- the second one is a small sidecar the
-   desktop client writes into; see `addon/README.md` for why it's a separate addon.
+   desktop client writes into; see `addon/README.md` for why it's a separate addon. The
+   same `ArchipelagoWoW.toc`/`ArchipelagoWoW_Bridge.toc` work for every supported
+   expansion, Vanilla through Mists of Pandaria; there's nothing to swap or rename.
 5. Launch World of Warcraft and make sure both addons are enabled on your character-select
-   AddOns list. If either shows greyed out on retail, check "Load out of date AddOns" --
-   retail's Interface version changes with each patch and `ArchipelagoWoW.toc`/
-   `ArchipelagoWoW_Bridge.toc` are pinned to a specific one.
+   AddOns list. If either shows greyed out, check "Load out of date AddOns": the shipped
+   `.toc` declares one specific Interface number (see `addon/README.md`'s "One .toc for
+   every expansion" section for why that's fine on any of them, not just that exact one).
 6. Open the Archipelago Launcher and click **WoW Leveling Client**. This is the piece that
    actually connects to your room -- the first time it runs, it will try to auto-detect your
-   WoW install folder, or ask you to pick it (change it later with `/wowdir <path>`).
-   A Battle.net-managed install (retail, Classic, Classic Era -- WTF lives inside a
-   `_retail_`/`_classic_`/etc. subfolder) is auto-detected and handled correctly.
+   WoW install folder, or ask you to pick it (change it later with `/wowdir <path>`). A
+   Battle.net install, where WTF lives one level down under a version-named subfolder
+   (`_classic_era_`, `_classic_`, ...), is auto-detected and handled correctly.
 7. Connect the client to your room the same way you would any other Archipelago client --
    server address, slot name, optional password, either via its GUI fields or `/connect
    host:port`. The addon has no server/slot/password fields of its own; the two are
    unrelated: which room you're connected to is decided here, in the client, and which WoW
    character it reads/writes for is decided by step 8 below.
 8. If you have more than one character with ArchipelagoWoW data (e.g. multiple realms or
-   alts under the same WoW install), run `/wowchar` in the client to see them listed and pin
-   the one for this room with `/wowchar <number>`. With only one such character, this is
-   automatic -- nothing to do.
+   alts under the same WoW install), run `/wow` in the client to see them listed and pin
+   the one for this room with `/wow <number>`. This pin is remembered separately per room,
+   so a fresh room never starts out with anything pre-selected. With only one such
+   character, this is automatic; nothing to do.
 
 ## Playing
 
@@ -92,7 +96,8 @@ drop your target/casting at a dangerous moment, so nothing ever reloads the UI o
   or server.
 - A WoW install can have many Account/Realm/Character combinations. With only one that has
   ArchipelagoWoW data, the desktop client uses it automatically; with more than one, pin the
-  right one with `/wowchar` (see step 8) rather than relying on "whichever logged out most
-  recently" -- checking mail on an unrelated alt would otherwise silently steal focus from
-  the character actually playing this room. Run `/wowchar` any time to see which one is
-  currently pinned or re-pin it.
+  right one with `/wow` (see step 8) rather than relying on "whichever logged out most
+  recently", since checking mail on an unrelated alt would otherwise silently steal focus
+  from the character actually playing this room. The pin is per Archipelago room, so it
+  never carries over to a different room. Run `/wow` any time to see which one is currently
+  pinned, what's actively syncing, or to re-pin it.

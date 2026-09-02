@@ -1,44 +1,23 @@
 -- ArchipelagoWoW: Compat.lua
--- Cross-version compatibility helpers. This is the only file that should ever
--- branch on client flavor. Everything else calls into APW.Compat instead of
--- checking WOW_PROJECT_ID directly.
+-- Cross-version compatibility helpers. This is the only file that should ever branch
+-- on API surface.
 --
--- IMPORTANT: never hardcode the numeric WOW_PROJECT_ID values. Always compare
--- against Blizzard's own named globals (WOW_PROJECT_MAINLINE, WOW_PROJECT_CLASSIC,
--- WOW_PROJECT_BURNING_CRUSADE_CLASSIC, WOW_PROJECT_WRATH_CLASSIC,
--- WOW_PROJECT_CATACLYSM_CLASSIC, ...) since those resolve correctly on every
--- client build. If WOW_PROJECT_ID does not exist at all (it's nil), all the checks
--- below are written to fail safe (false), and Compat.IsLegacyClient below picks up
--- the fallback.
+-- The addon is made for World of Warcraft Classic, from Classic Era through Mists of
+-- Pandaria Classic, and also runs on retail. The same files load on every one of
+-- them, so nothing here branches on WOW_PROJECT_ID or client flavor; every check below
+-- reads the actual API surface instead (does this global/mixin exist right now?).
 
 local ADDON_NAME, APW = ...
 
 APW.Compat = APW.Compat or {}
 local Compat = APW.Compat
 
-local function isProject(namedGlobal)
-    return WOW_PROJECT_ID ~= nil and namedGlobal ~= nil and WOW_PROJECT_ID == namedGlobal
-end
+-- True when the client has the C_Map API, as every Classic client does; see
+-- Map.lua/MapLegacy.lua, which pick their implementation off this flag.
+Compat.HasModernMapAPI = C_Map ~= nil
 
-Compat.IsMainline = isProject(WOW_PROJECT_MAINLINE)
-Compat.IsVanilla = isProject(WOW_PROJECT_CLASSIC)
-Compat.IsBCC = isProject(WOW_PROJECT_BURNING_CRUSADE_CLASSIC)
-Compat.IsWrath = isProject(WOW_PROJECT_WRATH_CLASSIC)
-Compat.IsCata = isProject(WOW_PROJECT_CATACLYSM_CLASSIC)
-Compat.IsMists = isProject(WOW_PROJECT_MISTS_CLASSIC)
-
--- True when WOW_PROJECT_ID isn't defined at all or didn't match anything named
--- above. Treated as the fallback for API-availability purposes: no BackdropTemplate
--- mixin, assume legacy widget behavior.
-Compat.IsLegacyClient = not (Compat.IsMainline or Compat.IsVanilla or Compat.IsBCC or Compat.IsCata or Compat.IsMists)
-
--- Detected off the actual API surface (whether the BackdropTemplate mixin
--- exists at all) rather than off client flavor: Blizzard has periodically
--- rebased later Classic-family content-phase clients onto the same
--- modernized frame codebase as retail, which can require the mixin there too
--- even though WOW_PROJECT_ID still reports a Classic project. A frame that
--- doesn't need the mixin already has backdrop methods built into the base
--- Frame widget, so BackdropTemplateMixin being absent is the correct signal.
+-- Whether a frame needs the BackdropTemplate mixin to get SetBackdrop/backdrop methods.
+-- Without the mixin, those methods are built into the base Frame widget.
 Compat.NeedsBackdropTemplate = BackdropTemplateMixin ~= nil
 
 -- Creates a frame, adding the BackdropTemplate mixin only where required.
@@ -60,8 +39,8 @@ function Compat.SetBackdrop(frame, backdrop)
     end
 end
 
--- Shared basic panel backdrop definition (dialog-box style border, works on both
--- retail-with-mixin and classic-native backdrop implementations).
+-- Shared basic panel backdrop definition (dialog-box style border, works with or
+-- without BackdropTemplate).
 Compat.PANEL_BACKDROP = {
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -71,9 +50,8 @@ Compat.PANEL_BACKDROP = {
     insets = { left = 11, right = 12, top = 12, bottom = 11 },
 }
 
--- SetMinResize/SetMaxResize were replaced by a single SetResizeBounds call in retail
--- (10.0+); every Classic-family client (and any client where WOW_PROJECT_ID isn't even
--- defined) only has the older pair.
+-- Uses SetResizeBounds where it exists, and the older SetMinResize/SetMaxResize pair
+-- otherwise.
 function Compat.SetResizeBounds(frame, minWidth, minHeight, maxWidth, maxHeight)
     if frame.SetResizeBounds then
         frame:SetResizeBounds(minWidth, minHeight, maxWidth, maxHeight)

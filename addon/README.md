@@ -36,7 +36,7 @@ fields: the Archipelago connection lives entirely in the separate bridge
 program, connected the same way as any other Archipelago client (its own
 console/GUI, e.g. `/connect host:port`). Which WoW character the bridge
 reads/writes is resolved on the bridge side (see the "Which character" note
-in WoWLevelingClient.py and its `/wowchar` command), not configured from
+in WoWLevelingClient.py and its `/wow` command), not configured from
 in-game. And syncing is manual-only (see "Sync model" below) -- no auto-sync
 toggle/delay to configure either.
 
@@ -59,7 +59,7 @@ bridge to find.
 This pattern -- external companion app + SavedVariables + periodic
 `ReloadUI()` to sync -- is the same one used by long-established, proven-safe
 WoW tools such as WeakAuras Companion and TradeSkillMaster's desktop app: no
-memory reading, no packet injection, zero ban risk on retail.
+memory reading, no packet injection, zero ban risk.
 
 ## Sync model
 
@@ -119,20 +119,31 @@ open/closed value to be read *before* `CreateMainPanel`/`CreateZonesPanel` run, 
 freshly created frame is shown by default, so their own `frame:Hide()` call fires
 `OnHide` and would otherwise clobber the persisted value first.
 
-## Multi-version packaging
+## Supported scope
 
-Both folders use the standard multi-TOC packaging convention (one shared set
-of `.lua` files, several `.toc` files differing only by `## Interface:`):
+Made for World of Warcraft Classic, from Classic Era through Mists of Pandaria Classic. It
+also runs on retail.
 
-| TOC file suffix | Client flavor | Interface number | Source |
-| --- | --- | --- | --- |
-| *(none)* | Retail / Mainline | 120007 | `TomTom.toc` / `TomTom_Mainline.toc`, installed under `_retail_` |
-| `_Wrath` | Wrath Classic | 30300 | `ElvUI.toc` |
-| `_Vanilla` | Classic Era | 11508 | `TomTom_Vanilla.toc` |
-| `_Cata` | Cataclysm Classic | 40401 | `TomTom_Cata.toc` |
+## One .toc for every expansion
 
-Client-flavor branching in the Lua code itself (see `Compat.lua`) is done only
-by comparing `WOW_PROJECT_ID` against Blizzard's named globals
-(`WOW_PROJECT_MAINLINE`, `WOW_PROJECT_CLASSIC`,
-`WOW_PROJECT_BURNING_CRUSADE_CLASSIC`, `WOW_PROJECT_WRATH_CLASSIC`,
-`WOW_PROJECT_CATACLYSM_CLASSIC`, ...), never hardcoded numeric IDs.
+Each folder ships a single `<AddonName>.toc`, pinned to `## Interface: 30300` (Wrath of
+the Lich King).
+
+That one file is enough for every expansion in scope, not just Wrath, because nothing in
+the Lua code branches on the `.toc`'s declared Interface number at all. `Compat.lua`
+checks whether a given global actually exists right now (`C_Map ~= nil`,
+`BackdropTemplateMixin ~= nil`), which gives the correct answer on whichever original
+client is actually running, Vanilla through Mists, regardless of what the `.toc` claims.
+The Interface field only ever controls one thing client-side: whether the addon shows as
+"out of date" (and is hidden by default) in the AddOns list on a client whose own build
+number doesn't match it. If that happens, checking "Load out of date AddOns" in that
+list (a checkbox that's existed since Vanilla) makes it load and run exactly the same as
+on Wrath; there's no separate file to swap in for a different expansion.
+
+Earlier revisions of this addon shipped a `_<Flavor>.toc` per expansion. Those extra
+files were removed rather than kept as dead weight; this single `.toc` is the whole story
+now.
+
+The Lua code itself (see `Compat.lua`) never branches on client flavor or
+`WOW_PROJECT_ID` at all, only on the actual API surface (does this global/mixin
+exist right now?), so the same files run on every expansion.
