@@ -78,6 +78,20 @@ import Utils
 from CommonClient import gui_enabled, logger, get_base_parser, CommonContext, ClientCommandProcessor, server_loop
 from NetUtils import ClientStatus
 
+# Universal Tracker (optional, player-installed apworld) -- if present, inheriting from its
+# TrackerGameContext instead of plain CommonContext gets this client a tracker tab and
+# in-logic location coloring for free, derived from this world's own create_regions/rules
+# rather than a separate poptracker pack. WoWLevelingContext.on_package's added
+# super().on_package(cmd, args) call below is what actually feeds it RoomInfo/Connected/
+# RoomUpdate. Falls back to plain CommonContext, no behavior change at all, when Universal
+# Tracker isn't installed -- this client never bundles or requires it.
+tracker_loaded = False
+try:
+    from worlds.tracker.TrackerClient import TrackerGameContext as SuperContext
+    tracker_loaded = True
+except ModuleNotFoundError:
+    from CommonClient import CommonContext as SuperContext
+
 from .savedvariables_io import LuaParseError, parse_saved_variables, dumps_lua_assignment, lua_table_to_list
 
 # Both of these are the same package this client ships inside -- read-only imports here,
@@ -645,7 +659,7 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
         return True
 
 
-class WoWLevelingContext(CommonContext):
+class WoWLevelingContext(SuperContext):
     game = GAME_NAME
     items_handling = 0b111  # full remote item tracking -- the AP server is the source of truth
     command_processor = WoWLevelingCommandProcessor
@@ -754,6 +768,11 @@ class WoWLevelingContext(CommonContext):
             )
 
     def on_package(self, cmd: str, args: dict):
+        # Required for Universal Tracker (see SuperContext above): when it's installed,
+        # its own TrackerGameContext.on_package is what actually reruns generation and
+        # derives reachable locations on RoomInfo/Connected/RoomUpdate. A no-op when it
+        # isn't (plain CommonContext.on_package does nothing).
+        super().on_package(cmd, args)
         if cmd == "RoomInfo":
             # self.seed_name is also read by CommonContext's own process_server_cmd for
             # its "same multiworld?" check before this callback ever runs. See
@@ -1031,6 +1050,15 @@ async def main(args) -> None:
     # pinned_character is deliberately left unset here: it's resolved per room by
     # _apply_room_pin once RoomInfo arrives, not loaded as a single global value.
     ctx.server_task = asyncio.create_task(server_loop(ctx), name="server loop")
+    # Per Universal Tracker's client integration guidelines: reruns this world's own
+    # generation logic standalone, off the connected slot's options, so the tracker tab can
+    # derive reachable locations without a separate poptracker pack. No-op (tracker_loaded
+    # is False) when Universal Tracker isn't installed.
+    if tracker_loaded and hasattr(ctx, "run_generator"):
+        try:
+            ctx.run_generator()
+        except Exception:
+            logger.exception("[WoW Leveling] Universal Tracker run_generator failed")
     if gui_enabled:
         ctx.run_gui()
     ctx.run_cli()
