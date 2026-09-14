@@ -548,12 +548,10 @@ def _bridge_sv_path_for(addon_sv_path: str) -> str:
 
 class WoWLevelingCommandProcessor(ClientCommandProcessor):
     def _cmd_wowdir(self, path: str = "") -> bool:
-        """Show, pick, or set this machine's WoW install folder: /wowdir with no argument
-        opens a folder picker (or shows the current path); /wowdir <path> sets it
-        directly. Accepts either the folder that directly contains WTF/Interface/Data
-        directly, or its parent if WTF instead lives one level down under a
-        version-named subfolder (found automatically either way). This is per-machine,
-        not per-room, so set it once."""
+        """Show or set this machine's WoW install folder. No argument opens a folder
+        picker (or shows the current path); /wowdir <path> sets it directly. Accepts the
+        folder containing WTF/Interface/Data, or its parent. This is a per-machine
+        setting, set once."""
         ctx: WoWLevelingContext = self.ctx
         path = path.strip().strip('"')
 
@@ -579,17 +577,11 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
         return True
 
     def _cmd_wow(self, selector: str = "") -> bool:
-        """List every WoW character with Archipelago data under the configured install,
-        pin the one this room's bridge should read/write for, or (with no argument) see
-        what's currently pinned and actively syncing: /wow with no argument lists
-        candidates (numbered), marks the one pinned for this room, and shows the
-        SavedVariables path actually being synced right now; /wow <number> or /wow <text
-        matching an Account/Realm/Character string> pins that one. The pin is remembered
-        separately per Archipelago room, so starting a new room never has anything
-        pre-selected, and running several rooms at once, each in its own client window,
-        keeps each one's pin separate. Only matters when more than one character has
-        ArchipelagoWoW data at once; with just one, it's used automatically and there's
-        nothing to pin."""
+        """List WoW characters with Archipelago data, or pin which one this room syncs.
+        No argument shows the candidates, the current pin, and what's actively syncing;
+        /wow <number> or /wow <matching Account/Realm/Character text> pins that one.
+        Pins are remembered per room. Only needed when more than one character has data;
+        with just one, it's used automatically."""
         ctx: WoWLevelingContext = self.ctx
         files = _find_addon_sv_files(ctx.wow_install_dir)
         if not files:
@@ -654,6 +646,17 @@ class WoWLevelingContext(SuperContext):
     game = GAME_NAME
     items_handling = 0b111  # full remote item tracking -- the AP server is the source of truth
     command_processor = WoWLevelingCommandProcessor
+    # When Universal Tracker is installed, SuperContext is its TrackerGameContext, which sets
+    # `tags = CommonContext.tags | {"Tracker"}` -- meant for a separate, passive tracker-only
+    # connection running alongside a real client. This client IS the real, playing connection
+    # (it sends genuine LocationChecks/StatusUpdate), just with UT's tab along for the ride, so
+    # it must never identify itself as a Tracker to the server: doing so makes the server
+    # silently reject those checks and the goal completion ("Trackers can't register new
+    # Location Checks" / "...Goal Complete"). Explicitly pinned back to CommonContext's own tags
+    # (harmless no-op when UT isn't installed, since SuperContext is already CommonContext there)
+    # rather than e.g. `SuperContext.tags - {"Tracker"}`, so it can't silently re-inherit
+    # "Tracker" (or any other UT-specific tag) if a future UT version adds more.
+    tags = CommonContext.tags
 
     def __init__(self, server_address, password):
         super().__init__(server_address, password)
