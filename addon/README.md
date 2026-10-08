@@ -140,6 +140,9 @@ number doesn't match it. If that happens, checking "Load out of date AddOns" in 
 list (a checkbox that's existed since Vanilla) makes it load and run exactly the same as
 on Wrath; there's no separate file to swap in for a different expansion.
 
+All the Lua in both addon folders sticks to the conservative subset listed in
+`Compat.lua`'s header; check new code against that list.
+
 Earlier revisions of this addon shipped a `_<Flavor>.toc` per expansion. Those extra
 files were removed rather than kept as dead weight; this single `.toc` is the whole story
 now.

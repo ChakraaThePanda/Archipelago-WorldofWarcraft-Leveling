@@ -21,7 +21,8 @@
 -- combat ends, rather than silently queuing a retry that would hit the same
 -- taint problem anyway.
 
-local ADDON_NAME, APW = ...
+local ADDON_NAME = "ArchipelagoWoW"
+local APW = ArchipelagoWoW
 
 APW.Sync = APW.Sync or {}
 local Sync = APW.Sync
@@ -88,7 +89,7 @@ end
 -- and asks you to click it again once combat ends, rather than queuing an
 -- automatic retry (which would hit the same taint restriction anyway).
 function Sync.SyncNow()
-    if InCombatLockdown() then
+    if APW.Compat.InCombatLockdown() then
         Core.AddLog("Can't sync while in combat -- click Sync Now again once combat ends")
         if DEFAULT_CHAT_FRAME then
             DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99ArchipelagoWoW|r: can't sync while in combat -- try again once combat ends.")

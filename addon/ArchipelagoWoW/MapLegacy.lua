@@ -35,7 +35,8 @@
 -- partial-but-clean coverage over complete-but-messy. Do not re-attempt those three
 -- without new information that changes the trade-off.
 
-local ADDON_NAME, APW = ...
+local ADDON_NAME = "ArchipelagoWoW"
+local APW = ArchipelagoWoW
 
 if APW.Compat.HasModernMapAPI then return end
 
@@ -131,7 +132,7 @@ local function AcquireTexture(index, layer)
 end
 
 local function HideTexturesFrom(index)
-    for i = index, #texturePool do
+    for i = index, table.getn(texturePool) do
         for _, tex in ipairs(texturePool[i]) do
             tex:Hide()
         end
@@ -153,7 +154,9 @@ local function Refresh()
         -- world" view) and unset (0); GetCurrentMapZone() ~= WORLDMAP_WORLD_ID means
         -- zoomed into one specific zone rather than the continent overview -- neither has
         -- zone children to overlay.
-        if continentID > 0 and GetCurrentMapZone() == WORLDMAP_WORLD_ID then
+        -- WORLDMAP_WORLD_ID is 0 wherever FrameXML defines it; the fallback covers a
+        -- client whose FrameXML doesn't.
+        if continentID > 0 and GetCurrentMapZone() == (WORLDMAP_WORLD_ID or 0) then
             local bridge = ArchipelagoWoW_BridgeDB
             if bridge then
                 local unlockedMap = bridge.unlockedZones or {}

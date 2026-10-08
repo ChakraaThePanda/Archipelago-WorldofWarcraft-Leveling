@@ -6,8 +6,19 @@
 -- Pandaria Classic, and also runs on retail. The same files load on every one of
 -- them, so nothing here branches on WOW_PROJECT_ID or client flavor; every check below
 -- reads the actual API surface instead (does this global/mixin exist right now?).
+--
+-- Lua style: every file in this addon sticks to a conservative subset of Lua, so none
+-- of them may use:
+--   * `...` anywhere (the shared namespace is the ArchipelagoWoW global below, not the
+--     per-addon `local name, ns = ...` file vararg)
+--   * the `#t` length operator (use table.getn) and the `%` operator
+--   * string methods like s:lower() or s:match() (call string.lower(s) etc. instead)
+--     and string.match/string.gmatch (use string.find)
+-- Script handlers fall back to the globals `this`, `event`, `arg1`, `arg2`, ... when
+-- their own parameters are nil.
 
-local ADDON_NAME, APW = ...
+ArchipelagoWoW = ArchipelagoWoW or {}
+local APW = ArchipelagoWoW
 
 APW.Compat = APW.Compat or {}
 local Compat = APW.Compat
@@ -49,6 +60,27 @@ Compat.PANEL_BACKDROP = {
     edgeSize = 32,
     insets = { left = 11, right = 12, top = 12, bottom = 11 },
 }
+
+-- Sets the size through the separate width/height setters, which every client has.
+function Compat.SetSize(region, width, height)
+    region:SetWidth(width)
+    region:SetHeight(height)
+end
+
+-- Falls back to GetHeight where FontString:GetStringHeight is missing: a font string
+-- given a width but no explicit height sizes itself to its wrapped text, so GetHeight
+-- reports the same thing.
+function Compat.GetStringHeight(fontString)
+    if fontString.GetStringHeight then
+        return fontString:GetStringHeight()
+    end
+    return fontString:GetHeight() or 0
+end
+
+-- Treats a missing InCombatLockdown as never locked down.
+function Compat.InCombatLockdown()
+    return InCombatLockdown ~= nil and InCombatLockdown()
+end
 
 -- Uses SetResizeBounds where it exists, and the older SetMinResize/SetMaxResize pair
 -- otherwise.

@@ -15,7 +15,8 @@
 -- "Sync Now (Reload UI)" button are the only trustworthy signals this addon
 -- can actually offer, so that's all it shows.
 
-local ADDON_NAME, APW = ...
+local ADDON_NAME = "ArchipelagoWoW"
+local APW = ArchipelagoWoW
 
 APW.UI = APW.UI or {}
 local UI = APW.UI
@@ -33,8 +34,8 @@ local Zones = APW.Zones
 -- only at the point of building a string to show the player.
 local function DisplayCase(s)
     if not s then return s end
-    s = tostring(s):gsub("_", " ")
-    s = s:gsub("(%a)([%w']*)", function(first, rest) return first:upper() .. rest:lower() end)
+    s = string.gsub(tostring(s), "_", " ")
+    s = string.gsub(s, "(%a)([%w']*)", function(first, rest) return string.upper(first) .. string.lower(rest) end)
     return s
 end
 
@@ -52,20 +53,24 @@ end
 -- at login.
 function UI.CreateScrollingText(parent, width, height)
     local scrollFrame = CreateFrame("ScrollFrame", nil, parent)
-    scrollFrame:SetSize(width, height)
+    Compat.SetSize(scrollFrame, width, height)
     scrollFrame:EnableMouseWheel(true)
 
     local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetSize(width, height)
+    Compat.SetSize(content, width, height)
     scrollFrame:SetScrollChild(content)
 
     local text = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    text:SetPoint("TOPLEFT", 2, 0)
+    text:SetPoint("TOPLEFT", content, "TOPLEFT", 2, 0)
     text:SetWidth(width - 8)
     text:SetJustifyH("LEFT")
     text:SetJustifyV("TOP")
 
-    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+    -- Handlers below reference their frames by upvalue and fall back to the arg1/arg2
+    -- globals when called without arguments (see Compat.lua's header).
+    scrollFrame:SetScript("OnMouseWheel", function(_, delta)
+        delta = delta or arg1
+        local self = scrollFrame
         local current = self:GetVerticalScroll()
         -- If GetVerticalScrollRange is missing, fall back to computing it directly rather
         -- than defaulting to 0, which would silently cap scrolling at the very top forever.
@@ -81,7 +86,8 @@ function UI.CreateScrollingText(parent, width, height)
         self:SetVerticalScroll(newScroll)
     end)
 
-    scrollFrame:SetScript("OnSizeChanged", function(self, w, h)
+    scrollFrame:SetScript("OnSizeChanged", function(_, w)
+        w = w or arg1
         if w and w > 16 then
             content:SetWidth(w)
             text:SetWidth(w - 8)
@@ -110,7 +116,7 @@ function UI.ApplyPanelPosition(frame, key)
     frame:ClearAllPoints()
     frame:SetPoint(ui.point or "CENTER", UIParent, ui.relPoint or "CENTER", ui.x or 0, ui.y or 0)
     if ui.width and ui.height then
-        frame:SetSize(ui.width, ui.height)
+        Compat.SetSize(frame, ui.width, ui.height)
     end
 end
 
@@ -133,8 +139,8 @@ function UI.MakeResizable(frame, key, minWidth, minHeight, onResize)
     Compat.SetResizeBounds(frame, minWidth, minHeight, 900, 900)
 
     local grip = CreateFrame("Button", nil, frame)
-    grip:SetSize(16, 16)
-    grip:SetPoint("BOTTOMRIGHT", -4, 4)
+    Compat.SetSize(grip, 16, 16)
+    grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
     grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
@@ -148,7 +154,7 @@ function UI.MakeResizable(frame, key, minWidth, minHeight, onResize)
     end)
 
     if onResize then
-        frame:SetScript("OnSizeChanged", onResize)
+        frame:SetScript("OnSizeChanged", function() onResize() end)
     end
 end
 
@@ -163,35 +169,35 @@ function UI.CreateMainPanel()
     if UI.mainPanel then return UI.mainPanel end
 
     local frame = Compat.CreateFrame("Frame", "ArchipelagoWoWMainPanel", UIParent)
-    frame:SetSize(380, 430)
+    Compat.SetSize(frame, 380, 430)
     frame:SetFrameStrata("DIALOG")
     Compat.SetBackdrop(frame, Compat.PANEL_BACKDROP)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        UI.SavePanelPosition(self, "mainPanel")
+    frame:SetScript("OnDragStart", function() frame:StartMoving() end)
+    frame:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        UI.SavePanelPosition(frame, "mainPanel")
     end)
     UI.MakeResizable(frame, "mainPanel", 320, 320, function()
         if UI.mainPanel then UI.RefreshLogText(UI.mainPanel) end
     end)
-    frame:SetScript("OnShow", function(self)
+    frame:SetScript("OnShow", function()
         ArchipelagoWoWDB.ui.mainPanel.shown = true
         UI.RefreshMainPanel()
     end)
-    frame:SetScript("OnHide", function(self)
+    frame:SetScript("OnHide", function()
         ArchipelagoWoWDB.ui.mainPanel.shown = false
     end)
     frame:Hide()
 
     local title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -18)
+    title:SetPoint("TOP", frame, "TOP", 0, -18)
     title:SetText("Archipelago")
 
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", -4, -4)
+    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
     local statusText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -200,7 +206,7 @@ function UI.CreateMainPanel()
     frame.statusText = statusText
 
     local sendBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    sendBtn:SetSize(200, 22)
+    Compat.SetSize(sendBtn, 200, 22)
     sendBtn:SetPoint("TOP", statusText, "BOTTOM", 0, -16)
     sendBtn:SetText("Send All Previous Levels")
     sendBtn:SetScript("OnClick", function()
@@ -210,7 +216,7 @@ function UI.CreateMainPanel()
     frame.sendBtn = sendBtn
 
     local syncBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    syncBtn:SetSize(200, 22)
+    Compat.SetSize(syncBtn, 200, 22)
     syncBtn:SetPoint("TOP", sendBtn, "BOTTOM", 0, -8)
     syncBtn:SetText("Sync Now (Reload UI)")
     syncBtn:SetScript("OnClick", function()
@@ -218,7 +224,7 @@ function UI.CreateMainPanel()
     end)
 
     local zonesBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    zonesBtn:SetSize(200, 22)
+    Compat.SetSize(zonesBtn, 200, 22)
     zonesBtn:SetPoint("TOP", syncBtn, "BOTTOM", 0, -8)
     zonesBtn:SetText("View Zones / Progress")
     zonesBtn:SetScript("OnClick", function()
@@ -242,7 +248,8 @@ function UI.CreateMainPanel()
     frame.logText = text
 
     local elapsedAccum = 0
-    frame:SetScript("OnUpdate", function(self, elapsed)
+    frame:SetScript("OnUpdate", function(_, elapsed)
+        elapsed = elapsed or arg1
         elapsedAccum = elapsedAccum + elapsed
         if elapsedAccum >= 1 then
             elapsedAccum = 0
@@ -257,7 +264,7 @@ end
 function UI.RefreshLogText(frame)
     local db = ArchipelagoWoWDB
     local lines = {}
-    local count = #db.log
+    local count = table.getn(db.log)
     local shown = 0
     for i = count, 1, -1 do
         local entry = db.log[i]
@@ -266,12 +273,12 @@ function UI.RefreshLogText(frame)
         shown = shown + 1
         if shown >= 100 then break end
     end
-    if #lines == 0 then
+    if table.getn(lines) == 0 then
         table.insert(lines, "|cff999999No activity yet.|r")
     end
 
     frame.logText:SetText(table.concat(lines, "\n"))
-    local neededHeight = frame.logText:GetStringHeight() + 8
+    local neededHeight = Compat.GetStringHeight(frame.logText) + 8
     local minHeight = frame.logScroll:GetHeight()
     frame.logContent:SetHeight(neededHeight > minHeight and neededHeight or minHeight)
     if frame.logScroll.UpdateScrollChildRect then
@@ -311,7 +318,7 @@ function UI.RefreshMainPanel()
         line = line .. "\n" .. table.concat(parts, "  -  ")
     end
 
-    local pendingCount = #ArchipelagoWoWDB.pendingChecks
+    local pendingCount = table.getn(ArchipelagoWoWDB.pendingChecks)
     if pendingCount > 0 then
         line = line .. string.format("\n|cffffcc00%d level(s) queued, will send on next sync|r", pendingCount)
     end
@@ -338,31 +345,31 @@ function UI.CreateZonesPanel()
     if UI.zonesPanel then return UI.zonesPanel end
 
     local frame = Compat.CreateFrame("Frame", "ArchipelagoWoWZonesPanel", UIParent)
-    frame:SetSize(380, 480)
+    Compat.SetSize(frame, 380, 480)
     frame:SetFrameStrata("DIALOG")
     Compat.SetBackdrop(frame, Compat.PANEL_BACKDROP)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        UI.SavePanelPosition(self, "zonesPanel")
+    frame:SetScript("OnDragStart", function() frame:StartMoving() end)
+    frame:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        UI.SavePanelPosition(frame, "zonesPanel")
     end)
     UI.MakeResizable(frame, "zonesPanel", 320, 320, function()
         if UI.zonesPanel then UI.RefreshZonesPanel() end
     end)
-    frame:SetScript("OnShow", function(self)
+    frame:SetScript("OnShow", function()
         ArchipelagoWoWDB.ui.zonesPanel.shown = true
         UI.RefreshZonesPanel()
     end)
-    frame:SetScript("OnHide", function(self)
+    frame:SetScript("OnHide", function()
         ArchipelagoWoWDB.ui.zonesPanel.shown = false
     end)
     frame:Hide()
 
     local title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -18)
+    title:SetPoint("TOP", frame, "TOP", 0, -18)
     title:SetText("Zones / Progress")
 
     local subtitle = frame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -370,7 +377,7 @@ function UI.CreateZonesPanel()
     frame.subtitle = subtitle
 
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", -4, -4)
+    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
     -- Small Sync Now shortcut so this panel is usable without also keeping the main
@@ -380,15 +387,15 @@ function UI.CreateZonesPanel()
     -- resolve on this client), whereas UIPanelButtonTemplate is already proven to render
     -- correctly everywhere else in this UI.
     local zonesSyncBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    zonesSyncBtn:SetSize(50, 20)
+    Compat.SetSize(zonesSyncBtn, 50, 20)
     -- Matches closeBtn's vertical center (a standard UIPanelCloseButton is ~32px tall,
     -- anchored at y=-4, so its center sits around y=-20; this button is 20px tall, so
     -- -10 centers it at the same height) and clears the ~12px border inset horizontally.
-    zonesSyncBtn:SetPoint("TOPLEFT", 10, -10)
+    zonesSyncBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -10)
     zonesSyncBtn:SetText("Sync")
     zonesSyncBtn:SetScript("OnClick", function() Sync.SyncNow() end)
-    zonesSyncBtn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    zonesSyncBtn:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(zonesSyncBtn, "ANCHOR_RIGHT")
         GameTooltip:SetText("Sync Now (Reload UI)")
         GameTooltip:Show()
     end)
@@ -419,7 +426,7 @@ local function AppendCountedSection(lines, headerText, map)
         if count and count > 0 then table.insert(names, name) end
     end
     table.sort(names)
-    if #names == 0 then
+    if table.getn(names) == 0 then
         table.insert(lines, "  |cff999999(none yet)|r")
     else
         for _, name in ipairs(names) do
@@ -456,7 +463,7 @@ function UI.RefreshZonesPanel()
 
     table.insert(lines, "|cffffd100Zones Unlocked|r")
     local groups = Zones.GroupUnlocked(bridge.unlockedZones)
-    if #groups == 0 then
+    if table.getn(groups) == 0 then
         table.insert(lines, "  |cff999999(none yet)|r")
     else
         for _, group in ipairs(groups) do
@@ -468,7 +475,7 @@ function UI.RefreshZonesPanel()
     end
 
     frame.text:SetText(table.concat(lines, "\n"))
-    local neededHeight = frame.text:GetStringHeight() + 8
+    local neededHeight = Compat.GetStringHeight(frame.text) + 8
     local minHeight = frame.scroll:GetHeight()
     frame.content:SetHeight(neededHeight > minHeight and neededHeight or minHeight)
     if frame.scroll.UpdateScrollChildRect then
@@ -534,7 +541,8 @@ SLASH_ARCHIPELAGOWOW1 = "/apwow"
 SLASH_ARCHIPELAGOWOW2 = "/archipelago"
 SlashCmdList["ARCHIPELAGOWOW"] = function(msg)
     msg = tostring(msg or "")
-    msg = msg:lower():match("^%s*(.-)%s*$")
+    local _, _, trimmed = string.find(string.lower(msg), "^%s*(.-)%s*$")
+    msg = trimmed or ""
     if msg == "zones" then
         UI.ToggleZonesPanel()
     else
