@@ -147,6 +147,13 @@ number doesn't match it. If that happens, checking "Load out of date AddOns" in 
 list (a checkbox that's existed since Vanilla) makes it load and run exactly the same as
 on Wrath; there's no separate file to swap in for a different expansion.
 
+Vanilla (1.12.x) needs one more thing on top of that: it runs Lua 5.0, not the Lua 5.1
+every later client uses, and it passes script handlers no arguments (they read the
+`this`/`event`/`arg1` globals instead). All the Lua in both addon folders is written to
+that lowest common denominator; `Compat.lua`'s header lists the rules. A file that breaks
+them fails to even parse on Vanilla (for example "unexpected symbol near `...`"), so
+check new code against that list.
+
 Earlier revisions of this addon shipped a `_<Flavor>.toc` per expansion (one per TOC file
 suffix Blizzard's own modern client understands), on the mistaken assumption that an
 original-era client would pick the right one automatically. It doesn't: that

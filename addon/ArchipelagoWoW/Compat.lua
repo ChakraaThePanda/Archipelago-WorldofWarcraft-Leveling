@@ -19,8 +19,21 @@
 -- the correct answer both for the real target (nothing beyond what an original client
 -- ever exposed) and, harmlessly, for anyone who loads this out of scope on a modern
 -- client anyway.
+--
+-- Lua language level: Vanilla (1.12.x) runs Lua 5.0, while Burning Crusade onward runs
+-- Lua 5.1. Every file in this addon is written to parse and run on BOTH, so none of them
+-- may use 5.1-only syntax or library calls. That rules out:
+--   * `...` anywhere (the per-addon `local name, ns = ...` file vararg didn't exist on
+--     Vanilla either, so the shared namespace is the ArchipelagoWoW global below)
+--   * the `#t` length operator (use table.getn) and the `%` operator
+--   * string methods like s:lower() or s:match() (5.0 strings have no metatable; call
+--     string.lower(s) etc. instead) and string.match/string.gmatch (use string.find)
+-- Script handlers also differ: on Vanilla they receive no arguments at all and read the
+-- globals `this`, `event`, `arg1`, `arg2`, ... instead, so every handler here falls back
+-- to those when its own parameters are nil.
 
-local ADDON_NAME, APW = ...
+ArchipelagoWoW = ArchipelagoWoW or {}
+local APW = ArchipelagoWoW
 
 APW.Compat = APW.Compat or {}
 local Compat = APW.Compat
@@ -63,6 +76,29 @@ Compat.PANEL_BACKDROP = {
     edgeSize = 32,
     insets = { left = 11, right = 12, top = 12, bottom = 11 },
 }
+
+-- Region:SetSize only exists from Wrath (3.0) onward; Vanilla and TBC only have the
+-- separate width/height setters.
+function Compat.SetSize(region, width, height)
+    region:SetWidth(width)
+    region:SetHeight(height)
+end
+
+-- FontString:GetStringHeight doesn't exist on Vanilla. There, a font string given a
+-- width but no explicit height sizes itself to its wrapped text, so GetHeight reports
+-- the same thing.
+function Compat.GetStringHeight(fontString)
+    if fontString.GetStringHeight then
+        return fontString:GetStringHeight()
+    end
+    return fontString:GetHeight() or 0
+end
+
+-- InCombatLockdown arrived with the secure frame system in TBC (2.0). Vanilla has no
+-- such lockdown at all, so there's nothing to refuse there.
+function Compat.InCombatLockdown()
+    return InCombatLockdown ~= nil and InCombatLockdown()
+end
 
 -- SetMinResize/SetMaxResize were replaced by a single SetResizeBounds call in much
 -- later (10.0+) clients; every original-era client this addon targets only has the

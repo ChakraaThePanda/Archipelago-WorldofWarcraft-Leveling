@@ -30,7 +30,8 @@
 -- comment), so this overlay reflects "state as of last sync", not something that
 -- updates live mid-session.
 
-local ADDON_NAME, APW = ...
+local ADDON_NAME = "ArchipelagoWoW"
+local APW = ArchipelagoWoW
 
 -- Everything below needs C_Map/Enum.UIMapType/the MapCanvas pin system, none of which
 -- exist on a genuine pre-Legion (original 3.3.5-era) client -- see MapLegacy.lua for the

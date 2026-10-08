@@ -10,7 +10,8 @@
 -- world revision, etc.) simply falls into the "Other/Ungrouped" bucket
 -- instead of erroring.
 
-local ADDON_NAME, APW = ...
+local ADDON_NAME = "ArchipelagoWoW"
+local APW = ArchipelagoWoW
 
 APW.Zones = APW.Zones or {}
 local Zones = APW.Zones
@@ -151,7 +152,8 @@ end
 -- gate it.
 Zones.ZONE_DISPLAY_NAME_TO_ITEMS = {}
 for itemName in pairs(Zones.ZONE_TO_CATEGORY) do
-    local displayName = itemName:match("^(.-)%s*%(%d+%-%d+%)$") or itemName
+    local _, _, displayName = string.find(itemName, "^(.-)%s*%(%d+%-%d+%)$")
+    displayName = displayName or itemName
     local list = Zones.ZONE_DISPLAY_NAME_TO_ITEMS[displayName]
     if not list then
         list = {}
@@ -199,7 +201,7 @@ function Zones.GroupUnlocked(unlockedMap)
     local result = {}
     for _, cat in ipairs(Zones.CATEGORY_ORDER) do
         local items = buckets[cat]
-        if items and #items > 0 then
+        if items and table.getn(items) > 0 then
             table.sort(items)
             table.insert(result, { category = cat, items = items })
         end

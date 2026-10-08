@@ -3,7 +3,8 @@
 -- reconciliation pass that merges the bridge's authoritative state
 -- (ArchipelagoWoW_BridgeDB) into our own display state on every reload.
 
-local ADDON_NAME, APW = ...
+local ADDON_NAME = "ArchipelagoWoW"
+local APW = ArchipelagoWoW
 
 APW.Core = APW.Core or {}
 local Core = APW.Core
@@ -76,7 +77,7 @@ function Core.AddLog(text)
     local db = ArchipelagoWoWDB
     if not db then return end
     table.insert(db.log, { ts = time(), text = text })
-    while #db.log > LOG_CAP do
+    while table.getn(db.log) > LOG_CAP do
         table.remove(db.log, 1)
     end
 end
@@ -160,7 +161,7 @@ function Core.Reconcile()
     if addedAny then
         table.sort(db.log, function(a, b) return (a.ts or 0) < (b.ts or 0) end)
     end
-    while #db.log > LOG_CAP do
+    while table.getn(db.log) > LOG_CAP do
         table.remove(db.log, 1)
     end
 end
@@ -195,15 +196,19 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
 
-eventFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" then
-        local loadedAddonName = ...
+-- Vanilla passes no handler arguments (see Compat.lua's header), hence the fallback to
+-- the `event`/`arg1` globals. Every event handled here has at most one argument.
+eventFrame:SetScript("OnEvent", function(self, evt, eventArg1)
+    evt = evt or event
+    if eventArg1 == nil then eventArg1 = arg1 end
+    if evt == "ADDON_LOADED" then
+        local loadedAddonName = eventArg1
         if loadedAddonName == ADDON_NAME then
             -- Only our own two tables are guaranteed present at this point;
             -- the bridge addon may not have fired ADDON_LOADED yet. Shape-only.
             Core.EnsureDB()
         end
-    elseif event == "PLAYER_LOGIN" then
+    elseif evt == "PLAYER_LOGIN" then
         -- By PLAYER_LOGIN every enabled addon (including the bridge sidecar)
         -- has already loaded its SavedVariables, so it's safe to reconcile now.
         Core.EnsureDB()
@@ -217,8 +222,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if APW.UI and APW.UI.OnLogin then
             APW.UI.OnLogin()
         end
-    elseif event == "PLAYER_LEVEL_UP" then
-        local newLevel = ...
+    elseif evt == "PLAYER_LEVEL_UP" then
+        local newLevel = eventArg1
         newLevel = tonumber(newLevel) or UnitLevel("player")
         if APW.Sync and APW.Sync.OnLevelUp then
             APW.Sync.OnLevelUp(newLevel)
