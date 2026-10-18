@@ -120,6 +120,8 @@ STAT_TOTAL_GOLD_ACQUIRED = 328  # loot + quests + vendors + auctions, in copper
 STAT_FISH_CAUGHT = 1518
 STAT_QUESTS_COMPLETED = 98
 STAT_TOTAL_DEATHS = 60
+STAT_TIMES_HEARTHED = 353
+STAT_FLIGHT_PATHS_TAKEN = 349
 
 COPPER_PER_GOLD = 10000
 
@@ -162,6 +164,11 @@ for _region, _kills, _quests, _fish in [
         {'name': f'Catch {n} Fish', 'stat': STAT_FISH_CAUGHT, 'threshold': n, 'region': _region}
         for n in _fish
     ]
+# First flight path in 11-20: most characters don't reach a flight master before ~level 10.
+_RAW_STAT_LOCATIONS += [
+    {'name': 'Use Your Hearthstone', 'stat': STAT_TIMES_HEARTHED, 'threshold': 1, 'region': 'Levels 01-10'},
+    {'name': 'Take a Flight Path', 'stat': STAT_FLIGHT_PATHS_TAKEN, 'threshold': 1, 'region': 'Levels 11-20'},
+]
 
 
 class WoWLevelingLocation(Location):
