@@ -6,8 +6,8 @@
 - World of Warcraft: the original, live-service client for the expansion you intend to
   play (Vanilla through Mists of Pandaria, 2004-2013), as still run today via
   private-server emulation. This project does **not** target Blizzard's 2019+ "WoW
-  Classic" rerelease or retail; those are different software (your `expansion` YAML
-  option should match what you're actually leveling in)
+  Classic" rerelease or retail, which are different software. Don't set `max_level`
+  higher than your game version goes (for example 60 for Vanilla).
 - The `wow_leveling.apworld` file, installed like any other apworld
 - This repository's `addon/` folder (two addon folders, described below)
 
@@ -37,7 +37,7 @@ drop your target/casting at a dangerous moment, so nothing ever reloads the UI o
    player with a WoW Leveling slot (single player or multiplayer) needs to do this on their
    own machine, even if someone else is generating/hosting the room.
 2. Add a WoW Leveling entry to your player YAML -- see this repo's `World of Warcraft Leveling.yaml`
-   for a ready-to-use template, and adjust `expansion`, `faction`, `goal`, and the other
+   for a ready-to-use template, and adjust `max_level`, `faction`, `goal`, and the other
    options to taste.
 3. Generate or join a multiworld using your YAML.
 4. Unzip this repo's `addons.zip` directly into your WoW installation's `Interface/AddOns`

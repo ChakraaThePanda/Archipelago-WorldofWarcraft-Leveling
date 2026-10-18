@@ -1,7 +1,7 @@
 # Archipelago-WorldofWarcraft-Leveling
 
 An [Archipelago](https://archipelago.gg) randomizer for **World of Warcraft**.
-Reach the level cap for your chosen expansion or find all the Gold items (McGuffin).
+Reach your chosen maximum level or find all the Gold items (McGuffin).
 
 * See [how randomization works](worlds/wow_leveling/docs/en_WorldofWarcraftLeveling.md)
   (goal, what gets shuffled, how zones and level caps unlock)

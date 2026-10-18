@@ -306,22 +306,28 @@ function UI.RefreshMainPanel()
     end
 
     local slotData = bridge and bridge.slotData
-    if slotData and (slotData.expansion or slotData.goal or slotData.faction) then
+    if slotData and (slotData.maxLevel or slotData.goal or slotData.faction) then
         local parts = {}
-        -- expansion is already display-cased ("Wrath of the Lich King", see EXPANSION_NAMES
-        -- in Options.py) -- only goal/faction need DisplayCase, since those come from raw
-        -- snake_case option identifiers ("gold_hunt", "alliance") that are also compared
-        -- against literally (e.g. the gold_hunt check just below), so the underlying
-        -- slotData.goal/faction values themselves must stay untouched.
-        if slotData.expansion then table.insert(parts, tostring(slotData.expansion)) end
+        -- goal/faction need DisplayCase, since those come from raw snake_case option
+        -- identifiers ("gold_hunt", "alliance") that are also compared against literally
+        -- (e.g. the gold_hunt check just below), so the underlying slotData.goal/faction
+        -- values themselves must stay untouched.
+        if slotData.maxLevel then table.insert(parts, "Max Level " .. tostring(slotData.maxLevel)) end
         if slotData.faction then table.insert(parts, DisplayCase(slotData.faction)) end
         if slotData.goal then table.insert(parts, "Goal: " .. DisplayCase(slotData.goal)) end
         line = line .. "\n" .. table.concat(parts, "  -  ")
     end
 
     local pendingCount = table.getn(ArchipelagoWoWDB.pendingChecks)
+    local pendingNoun = "level(s)"
+    -- Statistics milestones only exist in seeds with include_achievements on; without
+    -- them, nothing achievement-related is shown at all.
+    if bridge and bridge.statChecks and table.getn(bridge.statChecks) > 0 then
+        pendingCount = pendingCount + table.getn(ArchipelagoWoWDB.pendingStatChecks)
+        pendingNoun = "check(s)"
+    end
     if pendingCount > 0 then
-        line = line .. string.format("\n|cffffcc00%d level(s) queued, will send on next sync|r", pendingCount)
+        line = line .. string.format("\n|cffffcc00%d %s queued, will send on next sync|r", pendingCount, pendingNoun)
     end
 
     frame.statusText:SetText(line)

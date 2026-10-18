@@ -2,46 +2,30 @@ from dataclasses import dataclass
 
 from Options import Choice, PerGameCommonOptions, Range, Toggle
 
-# Category tag (as used in Items.py's _RAW_ITEMS, e.g. "The Burning Crusade") for each Expansion
-# option value below, in the same order. Also doubles as the ordered list of expansions,
-# used to compute how many trailing "Progressive Levels" copies / expansion-locked items
-# get dropped from the pool once a lower expansion is chosen.
-EXPANSION_NAMES: list[str] = [
-    "Vanilla",
-    "The Burning Crusade",
-    "Wrath of the Lich King",
-    "Cataclysm",
-    "Mists of Pandaria",
-]
-EXPANSION_CATACLYSM = 3
+# Above this max level, the seed reaches into Cataclysm/Mists content, which assumes the
+# world has already been reshaped, so pre_or_post_cataclysm is forced to Post-Cataclysm.
+POST_CATACLYSM_FORCED_ABOVE_LEVEL = 80
 
 
 class Goal(Choice):
-    """Select your goal for the randomizer.
-    Leveling: reach the maximum level for your selected expansion (see the 'expansion' option).
-    Gold Hunt: find a set amount of Gold in the item pool to win (see the 'gold_hunt_amount'
-    option)."""
+    """Choose how you win.
+    Leveling: reach your maximum level (see 'max_level').
+    Gold Hunt: find enough Gold items to win (see 'gold_hunt_amount')."""
     display_name = "Selected Goal"
     option_leveling = 0
     option_gold_hunt = 1
     default = 0
 
 
-class Expansion(Choice):
-    """This affects which items/locations exist in the randomizer, to match the max level
-    you want to reach.
-    vanilla = Level 60
-    the_burning_crusade = Level 70
-    wrath_of_the_lich_king = Level 80
-    cataclysm = Level 85
-    mists_of_pandaria = Level 90"""
-    display_name = "Selected Expansion"
-    option_vanilla = 0
-    option_the_burning_crusade = 1
-    option_wrath_of_the_lich_king = 2
-    option_cataclysm = 3
-    option_mists_of_pandaria = 4
-    default = 4
+class MaxLevel(Range):
+    """The level you want to reach. Every level up to this one is a check, and only zones
+    and dungeons that start at or below this level are included.
+    Expansion level caps: Vanilla 60, The Burning Crusade 70, Wrath of the Lich King 80,
+    Cataclysm 85, Mists of Pandaria 90."""
+    display_name = "Maximum Level"
+    range_start = 10
+    range_end = 90
+    default = 80
 
 
 class Faction(Choice):
@@ -53,17 +37,17 @@ class Faction(Choice):
 
 
 class RandomizeClass(Toggle):
-    """If enabled, you'll be given a single random class to play instead of choosing one
-    yourself -- check your client/slot data for which one you received. No Class items will
-    appear in the pool."""
+    """If enabled, you'll be given one random class to play instead of choosing it yourself.
+    The client shows which class you got."""
     display_name = "Randomize Starting Class"
     default = False
 
 
 class LevelItems(Choice):
-    """Progressive adds multiple "Progressive Levels" items to the pool instead of the
-    individual "Maximum Level X" items -- each copy raises your level cap to the next
-    bracket in sequence, rather than to one specific fixed level."""
+    """How your level cap goes up.
+    Sequential: each "Maximum Level X" item unlocks one specific level cap.
+    Progressive: each "Progressive Levels" item raises your level cap to the next step,
+    in order."""
     display_name = "Progressive or Sequential Level Items"
     option_sequential = 0
     option_progressive = 1
@@ -71,9 +55,9 @@ class LevelItems(Choice):
 
 
 class EasierTransitions(Choice):
-    """If enabled, logic expects 2 zone items per level bracket instead of 1, plus the first
-    zone item of a new expansion before letting you cross into it. This gives you more zone
-    choices for your level, at the cost of needing more items to progress."""
+    """If enabled, you need 2 zones for each level range instead of 1 before you can level
+    into it, plus the first zone of a new expansion before entering it. You get more zones
+    to choose from, but need more items to progress."""
     display_name = "Easier Transitions"
     option_false = 0
     option_true = 1
@@ -81,14 +65,14 @@ class EasierTransitions(Choice):
 
 
 class PreOrPostCataclysm(Choice):
-    """Whether the zones reshaped by the Cataclysm expansion (e.g. Stranglethorn Vale,
-    Desolace, Feralas, Thousand Needles) appear in their pre- or post-Cataclysm state in
-    the pool. Forced to Post-Cataclysm if 'expansion' is set to Cataclysm or Mists of
-    Pandaria, since those expansions assume the world has already changed."""
+    """Cataclysm changed many old zones, including their level ranges. For example,
+    Feralas is level 40-50 before Cataclysm and 35-40 after. Pick the version that matches
+    your game: Pre-Cataclysm for Vanilla up to Wrath of the Lich King, Post-Cataclysm for
+    Cataclysm and newer. Always Post-Cataclysm if your max level is above 80."""
     display_name = "Pre or Post Cataclysm"
     option_pre_cataclysm = 0
     option_post_cataclysm = 1
-    default = 1
+    default = 0
 
 
 class GoldHuntAmount(Range):
@@ -100,20 +84,35 @@ class GoldHuntAmount(Range):
 
 
 class IncludeDungeons(Toggle):
-    """If enabled, adds all the various leveling dungeons to the pool as filler items. This
-    has no effect on logic -- only Maximum Level and Zone items matter for that."""
+    """If enabled, adds the leveling dungeons as extra items. They're never required to
+    progress."""
     display_name = "Include Dungeons"
+    default = False
+
+
+class IncludeAchievements(Toggle):
+    """Only works on Wrath of the Lich King or newer.
+    Adds extra checks from your character's Statistics: dying once, earning your first
+    gold, and killing creatures, completing quests and catching fish. They get a bit
+    harder as you level, up to level 60."""
+    display_name = "Include Achievements"
     default = False
 
 
 @dataclass
 class WoWLevelingOptions(PerGameCommonOptions):
+    # How you win.
     goal: Goal
-    expansion: Expansion
-    faction: Faction
-    randomize_class: RandomizeClass
+    gold_hunt_amount: GoldHuntAmount
+    # How leveling unlocks.
+    max_level: MaxLevel
     level_items: LevelItems
     easier_transitions: EasierTransitions
+    # Your character.
+    faction: Faction
+    randomize_class: RandomizeClass
+    # Which version of the world.
     pre_or_post_cataclysm: PreOrPostCataclysm
-    gold_hunt_amount: GoldHuntAmount
+    # Optional extras.
     include_dungeons: IncludeDungeons
+    include_achievements: IncludeAchievements

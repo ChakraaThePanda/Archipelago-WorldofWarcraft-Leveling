@@ -1,4 +1,6 @@
+import re
 from dataclasses import dataclass
+from typing import Optional
 
 from BaseClasses import Item, ItemClassification
 
@@ -189,8 +191,6 @@ _RAW_ITEMS: list[dict] = [
     {'count': 1, 'name': 'Did someone say [Thunderfury, Blessed Blade of the Windseeker]?!', 'category': [], 'filler': True},
 ]
 
-# category name -> yaml option name(s) that must ALL be truthy for items tagged with that
-# category to be allowed in the pool. Currently just {"Dungeons": ["include_dungeons"]}.
 _RAW_CATEGORIES: dict = {'Dungeons': {'yaml_option': ['include_dungeons']}}
 
 
@@ -255,6 +255,16 @@ SEQUENTIAL_LEVEL_ITEMS: list[str] = [
     "Maximum Level 85",
     "Maximum Level 90",
 ]
+
+_LEVEL_RANGE_PATTERN = re.compile(r"\((\d+)-(\d+)\)$")
+
+
+def starting_level(name: str) -> Optional[int]:
+    """The starting level baked into a zone/dungeon item's name, e.g. 25 for
+    "Stonetalon Mountains (25-30)". None for items without a "(min-max)" suffix."""
+    match = _LEVEL_RANGE_PATTERN.search(name)
+    return int(match.group(1)) if match else None
+
 
 CLASS_ITEM_NAMES: list[str] = [name for name, data in item_table.items() if "Class" in data.category]
 

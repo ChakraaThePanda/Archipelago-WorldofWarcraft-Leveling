@@ -21,8 +21,7 @@ multiworld:
 ## What is the goal?
 
 Chosen with the "Selected Goal" option:
-- **Leveling**: reach the maximum level for your selected expansion (60 for Vanilla, up to
-  90 for Mists of Pandaria).
+- **Leveling**: reach your chosen "Maximum Level" (anywhere from 10 to 90).
 - **Gold Hunt**: find a set amount of "Gold" items in the pool (1-10, default 10).
 
 Reaching either condition is detected automatically by the companion bridge client and
@@ -30,13 +29,19 @@ reported to the server -- nothing needs to be done manually to "declare" you've 
 
 ## What items and locations get shuffled?
 
-- One location per character level, "Level 01" through the max level for your chosen
-  expansion, checked the moment you reach that level. There is no separate location for
+- One check per level, from "Level 01" up to your "Maximum Level", sent when you reach
+  that level. There is no separate location for
   the goal itself -- reaching it is detected from your level/gold state directly (see
   above) and reported to the server without needing a location check.
+- If "Include Achievements" is on (**Wrath of the Lich King or newer only**): extra checks
+  from your character's Statistics, like dying once, earning your first gold, and killing
+  creatures, completing quests and catching fish. They get a bit harder as you level, up to
+  level 60, and you only get the ones that fit your "Maximum Level". They're sent the next
+  time you click Sync.
 - The item pool is built from: Gold (Gold Hunt only), level-cap items (Sequential or
   Progressive, matching your "Level Items" choice), one unlock item per leveling zone
-  (filtered to your chosen expansion, faction, and Pre/Post-Cataclysm setting), a class and
+  (only zones that start at or below your "Maximum Level", for your faction and your
+  Pre/Post-Cataclysm choice), a class and
   a faction filler item per class/faction (removed from the pool if "Randomize Class" is on
   or always for your own faction, and precollected instead), and -- if "Include Dungeons" is
   on -- one filler item per leveling dungeon.

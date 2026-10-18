@@ -7,7 +7,7 @@ from .Items import GOLD_ITEM_NAME, PROGRESSIVE_LEVELS_ITEM_NAME, item_table
 # category name (e.g. "Zones 10-20") -> every item name tagged with it. Built off the full
 # item table regardless of what a given seed's option choices actually pooled -- an item
 # that was filtered out of this seed's pool simply can never be "had", so including it here
-# is harmless and keeps this independent of the faction/expansion/cataclysm filtering that
+# is harmless and keeps this independent of the faction/max_level/cataclysm filtering that
 # happens in __init__.py's create_items.
 ZONE_ITEMS_BY_CATEGORY: dict[str, list[str]] = {}
 for _name, _data in item_table.items():
@@ -74,10 +74,13 @@ def make_bracket_rule(world, bracket_name: str) -> Callable[[CollectionState], b
 
 def make_leveling_rule(world, final_bracket_name: str) -> Callable[[CollectionState], bool]:
     # The "Leveling" goal region requires exactly the same condition as crossing into the
-    # bracket that contains the chosen expansion's max level -- in the original Manual
+    # bracket that contains max_level -- in the original Manual
     # project, its "Leveling" region's "requires" string branched per
     # {YamlCompare(expansion == N)} and duplicated that bracket's own requirement in each
     # branch; here that's just calling bracket_reachable() with the final bracket name.
+    # A max level of 10 or less never leaves "Levels 01-10", which has no requirement.
+    if final_bracket_name not in BRACKET_REQUIREMENTS:
+        return lambda state: True
     return lambda state: bracket_reachable(state, world, final_bracket_name)
 
 
