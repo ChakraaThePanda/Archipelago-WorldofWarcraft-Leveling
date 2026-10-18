@@ -132,7 +132,9 @@ COPPER_PER_GOLD = 10000
 # same-level kill XP formula (45 + 5 * level), grinding alone takes ~1,450 kills to reach
 # 20, ~3,100 to 30, ~5,600 to 40, ~9,100 to 50 and ~13,700 to 60; questing does most of
 # the work in practice, so a normal leveler has roughly 40% of that. Each kill milestone
-# sits well under what you'd have by the time its bracket opens.
+# sits under what you'd have partway through its bracket. A questing level 10 Human Mage
+# measured on the server had 185 kills and 55 quests, so the first milestone of each
+# bracket after 01-10 shouldn't be done the moment that bracket opens.
 # Quest milestones stay at or under the worst case from the world DB's quest givers: a
 # starting zone has ~20-30 quests (Durotar only 16 at level 10 or lower), and each
 # bracket's smallest zone adds ~35-40 more (e.g. Westfall 33, Wetlands 39).
@@ -143,12 +145,12 @@ _RAW_STAT_LOCATIONS: list[dict] = [
 ]
 for _region, _kills, _quests, _fish in [
     # region           kills     quests    fish
-    ('Levels 01-10', [10, 50], [10, 20], [10]),
-    ('Levels 11-20', [100], [50], [25]),
-    ('Levels 21-30', [200], [75], [40]),
-    ('Levels 31-40', [500], [120], [60]),
-    ('Levels 41-50', [750], [160], [80]),
-    ('Levels 51-60', [1000], [200], [100]),
+    ('Levels 01-10', [25, 100], [10, 20], [10]),
+    ('Levels 11-20', [250], [60], [25]),
+    ('Levels 21-30', [500], [90], [40]),
+    ('Levels 31-40', [800], [120], [60]),
+    ('Levels 41-50', [1200], [160], [80]),
+    ('Levels 51-60', [1600], [200], [100]),
 ]:
     _RAW_STAT_LOCATIONS += [
         {'name': f'Kill {n} Creatures', 'stat': STAT_CREATURES_KILLED, 'threshold': n, 'region': _region}
