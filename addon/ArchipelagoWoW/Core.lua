@@ -21,6 +21,8 @@ local DB_DEFAULTS = {
     -- levels at once) and back-queue the level(s) in between, not just the one landed on.
     session = { seedName = nil, lastKnownLevel = nil },
     pendingChecks = {},
+    -- Statistics milestone location names reached but not yet confirmed sent (Stats.lua).
+    pendingStatChecks = {},
     log = {},
 }
 
@@ -31,8 +33,12 @@ local DB_DEFAULTS = {
 local BRIDGE_DEFAULTS = {
     connected = false,
     lastSyncEpoch = nil,
-    slotData = { expansion = nil, goal = nil, faction = nil, goldHuntAmount = nil },
+    slotData = { maxLevel = nil, goal = nil, faction = nil, goldHuntAmount = nil },
     ackedLevels = {},
+    -- This slot's Statistics milestones ({ name, stat, threshold }) and the names of the
+    -- ones the AP server has acked. See Stats.lua.
+    statChecks = {},
+    ackedStats = {},
     unlockedZones = {},
     -- name -> count (e.g. "Progressive Levels" = 3, or "Maximum Level 40" = 1). Class and
     -- faction items are deliberately not tracked at all -- both are a single fixed choice
@@ -115,6 +121,7 @@ function Core.Reconcile()
     local bridgeSeedName = bridge.slotData and bridge.slotData.seedName
     if bridgeSeedName ~= nil and db.session.seedName ~= nil and bridgeSeedName ~= db.session.seedName then
         db.pendingChecks = {}
+        db.pendingStatChecks = {}
         db.log = {}
         Core.AddLog(string.format("Connected to a new room (seed %s) -- activity log reset", tostring(bridgeSeedName)))
     end
@@ -130,6 +137,16 @@ function Core.Reconcile()
     end
     table.sort(stillPending)
     db.pendingChecks = stillPending
+
+    local stillPendingStats = {}
+    for _, name in ipairs(db.pendingStatChecks) do
+        if not bridge.ackedStats[name] then
+            table.insert(stillPendingStats, name)
+        else
+            Core.AddLog(string.format("\"%s\" confirmed synced by bridge", name))
+        end
+    end
+    db.pendingStatChecks = stillPendingStats
 
     -- Mirror bridge-reported session info for display (and so the next Reconcile can
     -- detect a room change, above) -- bridgeSeedName already resolved whichever of

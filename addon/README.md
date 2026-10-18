@@ -28,6 +28,8 @@ external bridge program never touches this file. It holds:
 - `ui` -- saved position/shown-state for the two custom panels.
 - `session` -- display-only mirror of bridge-reported info (e.g. seed name).
 - `pendingChecks` -- levels detected in-game but not yet confirmed sent.
+- `pendingStatChecks`: Statistics checks you've reached that haven't been sent yet. They
+  only exist with "Include Achievements" on, in Wrath of the Lich King or newer.
 - `log` -- a capped (200-entry) activity log.
 
 There is no `settings` table and no settings frame at all -- nothing here
@@ -94,7 +96,7 @@ memory reading, no packet injection, zero ban risk.
 ## Panels
 
 - **Archipelago** (`/apwow`, or the "View Zones / Progress" button's sibling): connection
-  status, seed name, expansion/faction/goal (faction and goal are display-cased for
+  status, seed name, max level/faction/goal (faction and goal are display-cased for
   reading -- "Alliance", "Goal: Leveling" -- but the underlying values compared in code
   stay the raw snake_case Options.py identifiers), Gold Hunt progress (`Gold: X/Y`) when
   that's the active goal, how many levels are queued to send, **Send All Previous

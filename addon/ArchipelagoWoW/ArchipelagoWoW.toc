@@ -11,6 +11,7 @@ Compat.lua
 Core.lua
 Zones.lua
 Sync.lua
+Stats.lua
 UI.lua
 Map.xml
 MapLegacy.lua

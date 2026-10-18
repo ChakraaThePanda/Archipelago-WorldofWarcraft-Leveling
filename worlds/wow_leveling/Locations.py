@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from BaseClasses import Location
 
 # Deliberately distinct from Items.BASE_ID so item and location IDs never collide.
 BASE_ID = 39280000
 _LOCATION_ID_OFFSET = 1000
+_STAT_LOCATION_ID_OFFSET = 2000
 
 # Every location this world can create, hardcoded here (not loaded from JSON/a data file).
 # Ported from the original Manual-based WorldofWarcraft-Leveling project's
@@ -110,6 +112,56 @@ _RAW_LOCATIONS: list[dict] = [
 ]
 
 
+# Statistics-tab milestones (include_achievements). Wrath of the Lich King or newer only:
+# the addon reads them with GetStatistic(stat_id), which only clients with achievements have. stat_ids are
+# Achievement.dbc ids of statistics, as listed in the in-game Statistics tab.
+STAT_CREATURES_KILLED = 107  # every creature type except critters
+STAT_TOTAL_GOLD_ACQUIRED = 328  # loot + quests + vendors + auctions, in copper
+STAT_FISH_CAUGHT = 1518
+STAT_QUESTS_COMPLETED = 98
+STAT_TOTAL_DEATHS = 60
+
+COPPER_PER_GOLD = 10000
+
+# Each milestone's region is the level bracket it's in logic in, so it needs that
+# bracket's level-cap item and zone(s) (see Rules.py). It only exists in seeds whose
+# max_level reaches that bracket. "Levels 01-10" is in logic from the start. Nothing scales
+# past level 60.
+#
+# Kept easy on purpose. For scale, from the game's XP-per-level table and the
+# same-level kill XP formula (45 + 5 * level), grinding alone takes ~1,450 kills to reach
+# 20, ~3,100 to 30, ~5,600 to 40, ~9,100 to 50 and ~13,700 to 60; questing does most of
+# the work in practice, so a normal leveler has roughly 40% of that. Each kill milestone
+# sits well under what you'd have by the time its bracket opens.
+# Quest milestones stay at or under the worst case from each zone's quest givers: a
+# starting zone has ~20-30 quests (Durotar only 16 at level 10 or lower), and each
+# bracket's smallest zone adds ~35-40 more (e.g. Westfall 33, Wetlands 39).
+# Appended to, never reordered: ids follow this list's order (see location_table).
+_RAW_STAT_LOCATIONS: list[dict] = [
+    {'name': 'Die Once', 'stat': STAT_TOTAL_DEATHS, 'threshold': 1, 'region': 'Levels 01-10'},
+    {'name': 'Acquire 1 Gold', 'stat': STAT_TOTAL_GOLD_ACQUIRED, 'threshold': COPPER_PER_GOLD, 'region': 'Levels 21-30'},
+]
+for _region, _kills, _quests, _fish in [
+    # region           kills     quests    fish
+    ('Levels 01-10', [10, 50], [10, 20], [10]),
+    ('Levels 11-20', [100], [50], [25]),
+    ('Levels 21-30', [200], [75], [40]),
+    ('Levels 31-40', [500], [120], [60]),
+    ('Levels 41-50', [750], [160], [80]),
+    ('Levels 51-60', [1000], [200], [100]),
+]:
+    _RAW_STAT_LOCATIONS += [
+        {'name': f'Kill {n} Creatures', 'stat': STAT_CREATURES_KILLED, 'threshold': n, 'region': _region}
+        for n in _kills
+    ] + [
+        {'name': f'Complete {n} Quests', 'stat': STAT_QUESTS_COMPLETED, 'threshold': n, 'region': _region}
+        for n in _quests
+    ] + [
+        {'name': f'Catch {n} Fish', 'stat': STAT_FISH_CAUGHT, 'threshold': n, 'region': _region}
+        for n in _fish
+    ]
+
+
 class WoWLevelingLocation(Location):
     game: str = "World of Warcraft Leveling"
 
@@ -118,11 +170,14 @@ class WoWLevelingLocation(Location):
 class LocationData:
     id: int
     region: str
+    # Set only for Statistics-tab milestones: GetStatistic(stat_id) >= threshold checks it.
+    stat_id: Optional[int] = None
+    threshold: Optional[int] = None
 
 
 # Location IDs follow _RAW_LOCATIONS' own order, same stability rationale as Items.py.
 # All 90 "Level NN" locations are pre-declared here so location_name_to_id is stable
-# regardless of which expansion is chosen at generation time -- only a subset is actually
+# regardless of the max_level chosen at generation time -- only a subset is actually
 # placed into regions in a given seed (see __init__.py).
 location_table: dict[str, LocationData] = {
     entry["name"]: LocationData(
@@ -131,6 +186,15 @@ location_table: dict[str, LocationData] = {
     )
     for index, entry in enumerate(_RAW_LOCATIONS)
 }
+location_table.update({
+    entry["name"]: LocationData(
+        BASE_ID + _STAT_LOCATION_ID_OFFSET + index,
+        entry["region"],
+        entry["stat"],
+        entry["threshold"],
+    )
+    for index, entry in enumerate(_RAW_STAT_LOCATIONS)
+})
 
 # The event location holding the locked "Victory" item. It is NOT part of location_table:
 # it has no id, is never sent over the network, and only exists so

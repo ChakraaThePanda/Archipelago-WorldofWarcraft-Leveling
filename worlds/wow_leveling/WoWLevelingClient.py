@@ -106,8 +106,8 @@ from .Items import (
     PROGRESSIVE_LEVELS_ITEM_NAME as _PROGRESSIVE_LEVELS_ITEM_NAME,
     SEQUENTIAL_LEVEL_ITEMS as _SEQUENTIAL_LEVEL_ITEMS,
 )
-from .Locations import location_table as _location_table
-from .Options import Goal as _GoalOption, Faction as _FactionOption, EXPANSION_NAMES as _EXPANSION_NAMES
+from .Locations import LocationData as _LocationData, location_table as _location_table
+from .Options import Goal as _GoalOption, Faction as _FactionOption
 from .Regions import BRACKET_MAX_LEVEL as _BRACKET_MAX_LEVEL
 
 GAME_NAME = "World of Warcraft Leveling"
@@ -167,6 +167,10 @@ _LEVEL_LOCATION_RE = re.compile(r"^Level (\d+)$")
 _ITEM_ID_TO_NAME: typing.Dict[int, str] = {data.code: name for name, data in _item_table.items()}
 _LOCATION_NAME_TO_ID: typing.Dict[str, int] = {name: data.id for name, data in _location_table.items()}
 _LOCATION_ID_TO_NAME: typing.Dict[int, str] = {v: k for k, v in _LOCATION_NAME_TO_ID.items()}
+# Statistics milestone locations (include_achievements) by ID, for _stat_checks/_acked_stats.
+_STAT_LOCATIONS: typing.Dict[int, typing.Tuple[str, _LocationData]] = {
+    data.id: (name, data) for name, data in _location_table.items() if data.stat_id is not None
+}
 
 
 def _choice_option_id_to_name(choice_cls: type) -> typing.Dict[int, str]:
@@ -233,18 +237,14 @@ def _current_level_cap(level_item_counts: typing.Dict[str, int]) -> int:
 
 
 def _translate_slot_data(slot_data: dict, seed_name: typing.Optional[str]) -> dict:
-    """slot_data's expansion/goal/faction are raw Choice-option ints (see
+    """slot_data's goal/faction are raw Choice-option ints (see
     WoWLevelingWorld.fill_slot_data in __init__.py) -- translated here into the
     human-readable strings the addon actually wants to display (see the bridge DB shape
     in the file contract). Falls back to nil (None) for anything out of range/unknown
     rather than guessing, per the contract's "nil-safe" requirement."""
-    expansion_id = slot_data.get("expansion")
-    expansion_name = (
-        _EXPANSION_NAMES[expansion_id] if isinstance(expansion_id, int) and 0 <= expansion_id < len(_EXPANSION_NAMES)
-        else None
-    )
+    max_level = slot_data.get("max_level")
     return {
-        "expansion": expansion_name,
+        "maxLevel": max_level if isinstance(max_level, int) else None,
         "goal": _GOAL_ID_TO_NAME.get(slot_data.get("goal")),
         "faction": _FACTION_ID_TO_NAME.get(slot_data.get("faction")),
         # Only meaningful when goal is Gold Hunt, but harmless to always include -- see
@@ -716,6 +716,8 @@ class WoWLevelingContext(SuperContext):
         # before ctx.server is actually set would otherwise silently do nothing and never
         # be retried -- confirmed live (see bridge_loop's comment below).
         self._cached_pending_levels: typing.List[int] = []
+        # Same, for the addon's pendingStatChecks (Statistics milestone location names).
+        self._cached_pending_stats: typing.List[str] = []
 
     def make_gui(self):
         ui = super().make_gui()
@@ -849,6 +851,9 @@ async def _handle_addon_file_change(ctx: WoWLevelingContext, addon_path: str) ->
         except (TypeError, ValueError):
             continue
     ctx._cached_pending_levels = pending_levels
+    ctx._cached_pending_stats = [
+        name for name in lua_table_to_list(db.get("pendingStatChecks")) if isinstance(name, str)
+    ]
 
     await _flush_pending_checks(ctx)
 
@@ -861,7 +866,7 @@ async def _flush_pending_checks(ctx: WoWLevelingContext) -> None:
     silently dropped for the rest of the session -- confirmed live: without this, the very
     first sync after connecting could send zero checks even though pendingChecks was
     non-empty, because ctx.connect() had not finished establishing ctx.server yet."""
-    if not ctx._cached_pending_levels or ctx.server is None:
+    if not (ctx._cached_pending_levels or ctx._cached_pending_stats) or ctx.server is None:
         return
 
     location_ids: typing.List[int] = []
@@ -875,6 +880,13 @@ async def _flush_pending_checks(ctx: WoWLevelingContext) -> None:
         if loc_id in ctx.checked_locations:
             continue  # already acked by the server -- resending is safe but pointless
         location_ids.append(loc_id)
+
+    for name in ctx._cached_pending_stats:
+        # Only milestones that actually exist in this slot (include_achievements, and a
+        # bracket its max_level reaches). See _stat_checks.
+        loc_id = _LOCATION_NAME_TO_ID.get(name)
+        if loc_id is not None and loc_id in ctx.missing_locations:
+            location_ids.append(loc_id)
 
     if location_ids:
         await ctx.send_msgs([{"cmd": "LocationChecks", "locations": location_ids}])
@@ -894,6 +906,22 @@ def _acked_levels(ctx: WoWLevelingContext) -> typing.Dict[int, bool]:
         if m:
             acked[int(m.group(1))] = True
     return acked
+
+
+def _stat_checks(ctx: WoWLevelingContext) -> typing.List[dict]:
+    """The Statistics milestones present in this slot, for the addon to watch: it checks
+    each one whose GetStatistic(stat) reaches threshold. Read off the server's own location
+    list, so seeds without include_achievements (or a milestone past max_level) send none."""
+    return [
+        {"name": name, "stat": data.stat_id, "threshold": data.threshold}
+        for name, data in (_STAT_LOCATIONS[loc_id] for loc_id in sorted(ctx.server_locations) if loc_id in _STAT_LOCATIONS)
+    ]
+
+
+def _acked_stats(ctx: WoWLevelingContext) -> typing.Dict[str, bool]:
+    """Statistics milestone names the AP server reports as checked. This is the
+    stat-check equivalent of _acked_levels."""
+    return {_STAT_LOCATIONS[loc_id][0]: True for loc_id in ctx.checked_locations if loc_id in _STAT_LOCATIONS}
 
 
 async def _maybe_send_goal(ctx: WoWLevelingContext) -> None:
@@ -932,6 +960,8 @@ def _build_bridge_db(ctx: WoWLevelingContext) -> dict:
         "lastSyncEpoch": int(time.time()),
         "slotData": _translate_slot_data(ctx.slot_data or {}, ctx.seed_name),
         "ackedLevels": _acked_levels(ctx),
+        "statChecks": _stat_checks(ctx),
+        "ackedStats": _acked_stats(ctx),
         "unlockedZones": {name: True for name in sorted(ctx.unlocked_zones)},
         "levelItems": dict(sorted(ctx.level_item_counts.items())),
         "currentLevelCap": _current_level_cap(ctx.level_item_counts),
@@ -964,7 +994,7 @@ def _bridge_db_fingerprint(ctx: WoWLevelingContext) -> tuple:
     MIN_BRIDGE_WRITE_INTERVAL_SECONDS for why avoiding a no-op write matters.
 
     slotData/seedName are included so reconnecting to a different slot (which can change
-    goal/faction/expansion/gold_hunt_amount while the other tracked fields still happen to
+    goal/faction/max_level/gold_hunt_amount while the other tracked fields still happen to
     match the previous slot's values) doesn't get skipped by the debounce -- without this
     the addon could keep displaying the previous slot's data for up to
     MIN_BRIDGE_WRITE_INTERVAL_SECONDS after switching."""
@@ -972,6 +1002,8 @@ def _bridge_db_fingerprint(ctx: WoWLevelingContext) -> tuple:
         ctx.server is not None,
         tuple(sorted(_translate_slot_data(ctx.slot_data or {}, ctx.seed_name).items())),
         tuple(sorted(_acked_levels(ctx).items())),
+        tuple(sorted(_acked_stats(ctx))),
+        frozenset(ctx.server_locations),
         tuple(sorted(ctx.unlocked_zones)),
         tuple(sorted(ctx.level_item_counts.items())),
         ctx.gold_count,

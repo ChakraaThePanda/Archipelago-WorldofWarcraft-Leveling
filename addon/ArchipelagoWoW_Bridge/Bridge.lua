@@ -19,8 +19,10 @@ if ArchipelagoWoW_BridgeDB == nil then
     ArchipelagoWoW_BridgeDB = {
         connected = false,
         lastSyncEpoch = nil,
-        slotData = { expansion = nil, goal = nil, faction = nil, goldHuntAmount = nil },
+        slotData = { maxLevel = nil, goal = nil, faction = nil, goldHuntAmount = nil },
         ackedLevels = {},
+        statChecks = {},
+        ackedStats = {},
         unlockedZones = {},
         levelItems = {},
         currentLevelCap = 10,
