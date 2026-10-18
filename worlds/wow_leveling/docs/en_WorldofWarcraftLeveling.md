@@ -34,10 +34,10 @@ reported to the server -- nothing needs to be done manually to "declare" you've 
   the goal itself -- reaching it is detected from your level/gold state directly (see
   above) and reported to the server without needing a location check.
 - If "Include Achievements" is on (**Wrath of the Lich King or newer only**): extra checks
-  from your character's Statistics, like dying once, earning your first gold, and killing
-  creatures, completing quests and catching fish. They get a bit harder as you level, up to
-  level 60, and you only get the ones that fit your "Maximum Level". They're sent the next
-  time you click Sync.
+  from your character's Statistics, like dying once, using your Hearthstone, taking a flight
+  path, earning your first gold, and killing creatures, completing quests and catching fish.
+  They get a bit harder as you level, up to level 60, and you only get the ones that fit
+  your "Maximum Level". They're sent the next time you click Sync.
 - The item pool is built from: Gold (Gold Hunt only), level-cap items (Sequential or
   Progressive, matching your "Level Items" choice), one unlock item per leveling zone
   (only zones that start at or below your "Maximum Level", for your faction and your

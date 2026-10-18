@@ -92,9 +92,9 @@ class IncludeDungeons(Toggle):
 
 class IncludeAchievements(Toggle):
     """Only works on Wrath of the Lich King or newer.
-    Adds extra checks from your character's Statistics: dying once, earning your first
-    gold, and killing creatures, completing quests and catching fish. They get a bit
-    harder as you level, up to level 60."""
+    Adds extra checks from your character's Statistics: dying once, using your
+    Hearthstone, taking a flight path, earning your first gold, and killing creatures,
+    completing quests and catching fish. They get a bit harder as you level, up to level 60."""
     display_name = "Include Achievements"
     default = False
 
