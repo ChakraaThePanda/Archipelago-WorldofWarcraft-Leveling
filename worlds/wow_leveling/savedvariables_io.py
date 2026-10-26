@@ -75,7 +75,6 @@ def _tokenize(text: str) -> typing.List[Token]:
 
 def _unescape_lua_string(raw: str) -> str:
     """`raw` includes its surrounding quotes, e.g. '"Un\\'Goro Crater"'."""
-    quote = raw[0]
     body = raw[1:-1]
     out: typing.List[str] = []
     i = 0

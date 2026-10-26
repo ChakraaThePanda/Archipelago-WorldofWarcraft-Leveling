@@ -42,21 +42,19 @@ under WTF/Account/, and on a machine used for more than one throwaway test chara
 one used for multiple realms/servers at once), "just pick whichever SavedVariables file
 changed most recently" is a real footgun: logging into an unrelated alt for two minutes
 to check mail would silently steal "active" status from the character actually playing
-this room. So this is explicit, not guessed:
+this room. So this is always explicit, never guessed, even with only one candidate:
 
-  * If exactly one ArchipelagoWoW.lua exists under the configured install, it's used,
-    with no ambiguity and nothing to configure.
-  * If more than one exists, /wow lists them (as "<Account>/<Realm>/<Character>", read
-    straight from each file's own path, since SavedVariables layout already encodes
-    this and the addon never needs to duplicate it) and lets you pin one explicitly by
-    index. The pin is remembered separately per Archipelago room (keyed by the room's
-    seed_name, the same id the server sends once per generated multiworld in its
-    RoomInfo packet), not as one single global choice, so starting a new room never has
-    anything pre-selected, and running several rooms at once, each in its own client
-    window, keeps each one's pin separate; see _room_key/_apply_room_pin below. Until a
-    room has a pin, the most-recent-mtime heuristic is used as a fallback, with a
-    warning logged on every poll tick while more than one candidate exists and nothing
-    is pinned yet, rather than silently guessing forever.
+  * /wow lists every character with an ArchipelagoWoW.lua (as
+    "<Account>/<Realm>/<Character>", read straight from each file's own path, since
+    SavedVariables layout already encodes this and the addon never needs to duplicate
+    it) and lets you pin one by index or name.
+  * The pin is remembered separately per slot in each Archipelago room (keyed by the
+    room's seed_name, the same id the server sends once per generated multiworld in its
+    RoomInfo packet, plus the connected team and slot), not as one single global choice.
+    So a new slot never has anything pre-selected, and two WoW slots in the same seed or
+    several rooms at once each keep their own pin; see _room_key/_apply_room_pin below.
+  * Until this slot has a pin (or if the pinned character's file is gone), nothing is
+    read, sent or written at all.
 
 The bridge reply is always written into that same character's SavedVariables folder,
 since SavedVariables are strictly per-character and the addon can only ever read its own
@@ -327,11 +325,15 @@ def _update_config(**updates) -> None:
 
 
 def _room_key(ctx: "WoWLevelingContext") -> typing.Optional[str]:
-    """A stable identifier for 'this Archipelago room', so the pinned WoW character can
-    be kept separate per room. Prefers seed_name, a unique id the server sends once per
-    generated multiworld (RoomInfo packet), since it stays correct even if the same room
-    gets rehosted on a different address/port. Falls back to the server address if no
-    RoomInfo has arrived yet (e.g. /wow run in the brief window before it).
+    """A stable identifier for 'this slot in this Archipelago room', so the pinned WoW
+    character can be kept separate per slot. seed_name, a unique id the server sends once
+    per generated multiworld (RoomInfo packet), stays correct even if the same room gets
+    rehosted on a different address/port, but on its own it can't tell apart two WoW
+    slots in the same seed, which would then share one pin. The team and slot numbers are
+    fixed in the generated multiworld too, so they're added.
+
+    None until the server's "Connected" packet has assigned a slot. There's deliberately
+    no fallback (e.g. to the server address): nothing is pinned or synced before that.
 
     seed_name is a base CommonContext field (not something this client invented) that
     also drives CommonContext's own "are you sure you're reconnecting to the same
@@ -347,10 +349,8 @@ def _room_key(ctx: "WoWLevelingContext") -> typing.Optional[str]:
     clears seed_name itself right before starting a new connection, which is what
     actually keeps this safe across a manual switch to a different room; on_package's
     RoomInfo handling is what (re)populates it once the new room's RoomInfo arrives."""
-    if ctx.seed_name:
-        return f"seed:{ctx.seed_name}"
-    if ctx.server_address:
-        return f"addr:{ctx.server_address}"
+    if ctx.seed_name and ctx.slot is not None:
+        return f"seed:{ctx.seed_name}|team:{ctx.team}|slot:{ctx.slot}"
     return None
 
 
@@ -478,19 +478,6 @@ def _find_addon_sv_files(wow_install_dir: str) -> typing.List[str]:
     return glob.glob(pattern)
 
 
-def _most_recent_addon_sv(files: typing.List[str]) -> typing.Optional[str]:
-    """Fallback only -- see _resolve_active_addon_sv. Whichever ArchipelagoWoW.lua under
-    WTF/Account/**/SavedVariables/ was written most recently, i.e. whichever character
-    most recently logged out or ReloadUI()'d. Takes the already-globbed candidate list
-    rather than re-scanning, since the caller already has it."""
-    if not files:
-        return None
-    try:
-        return max(files, key=os.path.getmtime)
-    except OSError:
-        return None
-
-
 def _character_identity(addon_sv_path: str) -> str:
     """"<Account>/<Realm>/<Character>", read straight from the SavedVariables path itself
     (.../WTF/Account/<Account>/<Realm>/<Character>/SavedVariables/ArchipelagoWoW.lua) --
@@ -504,34 +491,23 @@ def _character_identity(addon_sv_path: str) -> str:
 
 def _resolve_active_addon_sv(ctx: "WoWLevelingContext") -> typing.Optional[str]:
     """Picks which ArchipelagoWoW.lua this bridge session reads/writes for; see the
-    module docstring's "WHICH CHARACTER" section. This room's pin (ctx.pinned_character,
-    set by _apply_room_pin) wins whenever its file still exists; otherwise falls back to
-    most-recent-mtime, logging a warning (at most once per distinct candidate set, not
-    every poll tick) whenever that fallback is ambiguous."""
-    files = _find_addon_sv_files(ctx.wow_install_dir)
-    if not files:
+    module docstring's "WHICH CHARACTER" section. Only ever this slot's pinned character
+    (ctx.pinned_character, set by _apply_room_pin or /wow), never a guess: with no pin, or
+    a pin whose file no longer exists, returns None so nothing is read, sent or written.
+    A missing pinned file is warned about once per pin, not every poll tick."""
+    if not ctx.pinned_character:
         return None
-    if len(files) == 1:
-        return files[0]
-
-    if ctx.pinned_character:
-        for path in files:
-            if _character_identity(path) == ctx.pinned_character:
-                return path
+    for path in _find_addon_sv_files(ctx.wow_install_dir):
+        if _character_identity(path) == ctx.pinned_character:
+            return path
+    if ctx._warned_missing_pin != ctx.pinned_character:
+        ctx._warned_missing_pin = ctx.pinned_character
         logger.warning(
-            f"[WoW Leveling] Pinned character {ctx.pinned_character!r} not found among "
-            f"current candidates. Run /wow to re-pin. Falling back to most-recently-used."
+            f"[WoW Leveling] Pinned character {ctx.pinned_character!r} has no ArchipelagoWoW "
+            f"data under the configured WoW install. Nothing is synced until it does, or "
+            f"until you pick another one with /wow."
         )
-
-    candidates_key = frozenset(files)
-    if candidates_key != ctx._warned_ambiguous_candidates:
-        ctx._warned_ambiguous_candidates = candidates_key
-        logger.warning(
-            f"[WoW Leveling] {len(files)} WoW characters have ArchipelagoWoW data and none "
-            f"is pinned for this room. Guessing the most-recently-used one; run /wow to see "
-            f"them listed and pin the right one explicitly."
-        )
-    return _most_recent_addon_sv(files)
+    return None
 
 
 def _bridge_sv_path_for(addon_sv_path: str) -> str:
@@ -580,8 +556,8 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
         """List WoW characters with Archipelago data, or pin which one this room syncs.
         No argument shows the candidates, the current pin, and what's actively syncing;
         /wow <number> or /wow <matching Account/Realm/Character text> pins that one.
-        Pins are remembered per room. Only needed when more than one character has data;
-        with just one, it's used automatically."""
+        Pins are remembered per slot in each room. Always required, even with only one
+        candidate: nothing is synced for a slot until a character is pinned."""
         ctx: WoWLevelingContext = self.ctx
         files = _find_addon_sv_files(ctx.wow_install_dir)
         if not files:
@@ -596,27 +572,18 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
         room_key = _room_key(ctx)
 
         if not selector:
-            room_desc = f"{ctx.server_address} ({room_key})" if room_key else "not connected yet"
-            logger.info(f"[WoW Leveling] This room: {room_desc}")
+            room_desc = f"{ctx.player_names.get(ctx.slot)} on {ctx.server_address}" if room_key else "not connected yet"
+            logger.info(f"[WoW Leveling] This slot: {room_desc}")
             for i, identity in enumerate(identities, start=1):
-                marker = "  <- pinned for this room" if identity == ctx.pinned_character else ""
+                marker = "  <- pinned for this slot" if identity == ctx.pinned_character else ""
                 logger.info(f"  [{i}] {identity}{marker}")
-            if len(files) == 1:
-                logger.info("[WoW Leveling] Only one candidate, so it's used automatically; no pin needed.")
-            logger.info(f"[WoW Leveling] Currently syncing: {ctx.active_addon_sv_path or '(nothing yet)'}")
+            if not ctx.pinned_character:
+                logger.info("[WoW Leveling] No character pinned for this slot yet. Use /wow <number> to pick one.")
+            logger.info(f"[WoW Leveling] Currently syncing: {ctx.active_addon_sv_path or '(nothing)'}")
             return True
 
         if room_key is None:
-            logger.info("[WoW Leveling] Not connected to a room yet, and pins are saved per room. Connect first.")
-            return False
-        if ctx.seed_name is None:
-            # _room_key would fall back to an address-based key here, but that key is
-            # only ever a stand-in until the server's own RoomInfo arrives -- the moment
-            # it does, _apply_room_pin re-resolves using the real seed-based key instead
-            # and would silently discard a pin saved under the address-based one,
-            # orphaning it in client_config.json. Refusing to save until the real key is
-            # known closes that window entirely rather than risking a lost pin.
-            logger.info("[WoW Leveling] Still waiting for room info from the server. Try again in a moment.")
+            logger.info("[WoW Leveling] Not connected to a slot yet, and pins are saved per slot. Connect first.")
             return False
 
         chosen: typing.Optional[str] = None
@@ -638,7 +605,7 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
 
         ctx.pinned_character = chosen
         _save_pin(room_key, chosen)
-        logger.info(f"[WoW Leveling] Pinned character set to {chosen} for this room.")
+        logger.info(f"[WoW Leveling] Pinned character set to {chosen} for this slot.")
         return True
 
 
@@ -664,23 +631,26 @@ class WoWLevelingContext(SuperContext):
         self.active_addon_sv_path: typing.Optional[str] = None
         self._last_addon_sv_mtime: float = 0.0
 
-        # This room's "<Account>/<Realm>/<Character>" pin, resolved by _apply_room_pin
-        # from client_config.json's per-room "pins" the moment seed_name becomes known
-        # (see on_package's RoomInfo handling), or None if this room has never been
-        # pinned before (falls back to most-recent-mtime; see _resolve_active_addon_sv).
-        # Deliberately starts unset here and is never carried over from another room:
-        # a brand-new room always begins with nothing pre-selected. Set via /wow.
+        # This slot's "<Account>/<Realm>/<Character>" pin, resolved by _apply_room_pin
+        # from client_config.json's per-slot "pins" once the slot is known (see
+        # on_package's Connected handling), or None if this slot has never been pinned,
+        # in which case nothing is synced (see _resolve_active_addon_sv). Deliberately
+        # starts unset here and is never carried over from another slot or room: a new
+        # one always begins with nothing pre-selected. Set via /wow.
         self.pinned_character: typing.Optional[str] = None
         # room_key (see _room_key) that pinned_character was last resolved for, so
-        # _apply_room_pin only re-resolves when the room actually changes.
+        # _apply_room_pin only re-resolves when the room or slot actually changes.
         self._known_room_key: typing.Optional[str] = None
         # A message queued by _apply_room_pin to be logged on bridge_loop's next tick,
         # comfortably after the connection's own noise (join messages, etc.) has settled,
-        # rather than immediately during RoomInfo handling where it would get buried.
+        # rather than immediately during Connected handling where it would get buried.
         self._pending_pin_message: typing.Optional[str] = None
-        # Suppresses re-logging the same "ambiguous, no pin set" warning every poll tick;
-        # only warns again if the actual candidate set changes.
-        self._warned_ambiguous_candidates: typing.Optional[frozenset] = None
+        # Suppresses re-logging the same "pinned character has no data" warning every
+        # poll tick; only warns again for a different pin.
+        self._warned_missing_pin: typing.Optional[str] = None
+        # (addon file, its seedName) last warned about as belonging to another seed (see
+        # _handle_addon_file_change), so that warning is logged once, not every poll tick.
+        self._warned_other_seed: typing.Optional[tuple] = None
 
         self.slot_data: dict = {}
 
@@ -740,27 +710,40 @@ class WoWLevelingContext(SuperContext):
         self.seed_name = None
         await super().connect(address)
 
+    def forget_addon_reads(self) -> None:
+        """Drops the not-yet-acked levels/stats cached from the addon file and forces it to
+        be re-read on the next bridge_loop tick, for when what was read no longer applies
+        (another room, slot or character)."""
+        self._last_addon_sv_mtime = 0.0
+        self._cached_pending_levels = []
+        self._cached_pending_stats = []
+
     def _apply_room_pin(self) -> None:
-        """Called once this connection's room_key becomes known (see RoomInfo handling
-        below). Looks up whether a WoW character has been pinned for this specific room
-        before and, if so, resumes it; otherwise leaves pinned_character unset (a brand
-        new room, or one this client has never seen, always starts with nothing
-        pre-selected). Also covers reconnecting to a *different* room mid-session, since
-        room_key changing re-triggers this."""
+        """Called once this connection's room_key becomes known (see Connected handling
+        below). Looks up whether a WoW character has been pinned for this specific slot
+        before and, if so, resumes it; otherwise leaves pinned_character unset (a slot
+        this client has never seen always starts with nothing pre-selected, and nothing
+        syncs until /wow pins one). Also covers reconnecting to a *different* room or slot
+        mid-session, since room_key changing re-triggers this. Old seed-only pins from
+        earlier versions are deliberately not carried over: with two slots in one seed,
+        the wrong one could claim it, so each slot re-pins once instead."""
         room_key = _room_key(self)
         if room_key is None or room_key == self._known_room_key:
             return
         self._known_room_key = room_key
+        # Whatever was read from the addon file was judged against the previous room's
+        # seed (see _handle_addon_file_change), so drop it and re-read for this one.
+        self.forget_addon_reads()
         self.pinned_character = _load_pins().get(room_key)
         if self.pinned_character:
             self._pending_pin_message = (
-                f"[WoW Leveling] Resuming this room's pinned character: {self.pinned_character}. "
+                f"[WoW Leveling] Resuming this slot's pinned character: {self.pinned_character}. "
                 f"Use /wow to change it."
             )
         else:
             self._pending_pin_message = (
-                "[WoW Leveling] No WoW character pinned yet for this room. Run /wow to see "
-                "candidates and pick one, if more than one has Archipelago data."
+                "[WoW Leveling] No WoW character pinned yet for this slot. "
+                "Run /wow to see candidates, then /wow <number> to pick one."
             )
 
     def on_package(self, cmd: str, args: dict):
@@ -775,8 +758,10 @@ class WoWLevelingContext(SuperContext):
             # WoWLevelingContext.connect (which is what actually keeps that check safe
             # across a switch to a different room) and _room_key's docstring.
             self.seed_name = args.get("seed_name")
-            self._apply_room_pin()
         elif cmd == "Connected":
+            # Resolved here rather than on RoomInfo: the pin is per slot (see _room_key),
+            # and CommonContext only sets self.team/self.slot from this packet.
+            self._apply_room_pin()
             self.slot_data = args.get("slot_data", {}) or {}
             # Reset on every (re)connect, not just at ctx construction: reconnecting the
             # same running client to a DIFFERENT slot/room reuses this same context
@@ -840,6 +825,29 @@ async def _handle_addon_file_change(ctx: WoWLevelingContext, addon_path: str) ->
         return
     if not isinstance(db, dict):
         logger.warning(f"[WoW Leveling] {addon_path} didn't contain a table for {ADDON_DB_VAR}")
+        return
+
+    # Only trust checks the addon queued for THIS seed. The file can still hold another
+    # seed's unsent levels: a character that last synced with a different room, or a
+    # deleted and recreated one (WoW keeps the old character's SavedVariables folder, so
+    # the new one inherits its file). The addon clears those itself once it sees this
+    # seed in the bridge file (Core.Reconcile, at its next login or Sync Now), and only
+    # then does its seedName match here. Before the room is known there's nothing to
+    # compare against, so re-read on every tick until it is.
+    if ctx.seed_name is None:
+        ctx._last_addon_sv_mtime = 0.0
+        return
+    session = db.get("session")
+    addon_seed = session.get("seedName") if isinstance(session, dict) else None
+    if addon_seed is not None and addon_seed != ctx.seed_name:
+        ctx._cached_pending_levels = []  # not forget_addon_reads(): this read is current, just not ours
+        ctx._cached_pending_stats = []
+        if ctx._warned_other_seed != (addon_path, addon_seed):
+            ctx._warned_other_seed = (addon_path, addon_seed)
+            logger.info(
+                f"[WoW Leveling] {_character_identity(addon_path)} still has addon data from another "
+                f"seed. Click Sync Now in game to start syncing it with this one."
+            )
         return
 
     # Cache pendingChecks; actually sending is done unconditionally every poll tick by
@@ -1036,11 +1044,18 @@ async def bridge_loop(ctx: WoWLevelingContext) -> None:
 
             if ctx.wow_install_dir:
                 addon_path = _resolve_active_addon_sv(ctx)
+                if addon_path != ctx.active_addon_sv_path:
+                    # Switched character (re-pinned, a different slot, or the pin was
+                    # cleared): forget everything read from the previous one, so its
+                    # not-yet-acked levels/stats are never retried under this one, and
+                    # force a fresh read and bridge write for the new one.
+                    ctx.forget_addon_reads()
+                    ctx._last_bridge_fingerprint = None
                 if addon_path is None:
-                    # Character folder disappeared/renamed since the last tick, so don't
-                    # leave a stale path behind (checked by /wow and by the final shutdown
-                    # write, which would otherwise happily recreate a deleted character's
-                    # SavedVariables directory).
+                    # No pin, or the pinned character's folder disappeared/renamed, so
+                    # don't leave a stale path behind (checked by /wow and by the final
+                    # shutdown write, which would otherwise happily recreate a deleted
+                    # character's SavedVariables directory).
                     ctx.active_addon_sv_path = None
                 else:
                     ctx.active_addon_sv_path = addon_path
@@ -1073,8 +1088,8 @@ async def bridge_loop(ctx: WoWLevelingContext) -> None:
 async def main(args) -> None:
     ctx = WoWLevelingContext(args.connect, args.password)
     ctx.wow_install_dir = _resolve_wow_install_dir()
-    # pinned_character is deliberately left unset here: it's resolved per room by
-    # _apply_room_pin once RoomInfo arrives, not loaded as a single global value.
+    # pinned_character is deliberately left unset here: it's resolved per slot by
+    # _apply_room_pin once Connected arrives, not loaded as a single global value.
     ctx.server_task = asyncio.create_task(server_loop(ctx), name="server loop")
     # Per Universal Tracker's client integration guidelines: reruns this world's own
     # generation logic standalone, off the connected slot's options, so the tracker tab can

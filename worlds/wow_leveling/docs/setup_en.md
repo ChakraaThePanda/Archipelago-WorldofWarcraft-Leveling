@@ -60,11 +60,10 @@ drop your target/casting at a dangerous moment, so nothing ever reloads the UI o
    host:port`. The addon has no server/slot/password fields of its own; the two are
    unrelated: which room you're connected to is decided here, in the client, and which WoW
    character it reads/writes for is decided by step 8 below.
-8. If you have more than one character with ArchipelagoWoW data (e.g. multiple realms or
-   alts under the same WoW install), run `/wow` in the client to see them listed and pin
-   the one for this room with `/wow <number>`. This pin is remembered separately per room,
-   so a fresh room never starts out with anything pre-selected. With only one such
-   character, this is automatic; nothing to do.
+8. Run `/wow` in the client to see your characters with ArchipelagoWoW data, then pin the
+   one for this slot with `/wow <number>`. This is required even if you only have one:
+   nothing is synced or sent until you pin a character. The pin is remembered separately
+   per slot in each room, so a new slot never starts out with anything pre-selected.
 
 ## Playing
 
@@ -94,10 +93,8 @@ drop your target/casting at a dangerous moment, so nothing ever reloads the UI o
 - Everyone in a multiworld with a WoW Leveling slot needs their own copy of both addons and
   their own running WoW Leveling Client, even if you're all playing on the same WoW account
   or server.
-- A WoW install can have many Account/Realm/Character combinations. With only one that has
-  ArchipelagoWoW data, the desktop client uses it automatically; with more than one, pin the
-  right one with `/wow` (see step 8) rather than relying on "whichever logged out most
-  recently", since checking mail on an unrelated alt would otherwise silently steal focus
-  from the character actually playing this room. The pin is per Archipelago room, so it
-  never carries over to a different room. Run `/wow` any time to see which one is currently
-  pinned, what's actively syncing, or to re-pin it.
+- A WoW install can have many Account/Realm/Character combinations. The desktop client never
+  guesses which one you're playing: it only syncs the character you pinned with `/wow` (see
+  step 8). The pin is per slot in each Archipelago room, so it never carries over to a
+  different slot or room. Run `/wow` any time to see which one is currently pinned, what's
+  actively syncing, or to re-pin it.
