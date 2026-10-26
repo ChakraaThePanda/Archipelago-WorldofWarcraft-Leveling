@@ -12,10 +12,11 @@ BASE_ID = 39280000
 # Every item this world can create, hardcoded here (not loaded from JSON/a data file).
 # Ported faithfully from the original Manual-based WorldofWarcraft-Leveling project's
 # data/items.json (171 real items, verified to match exactly) plus one added entry:
-# Manual's engine synthesizes its configured filler_item_name ("Did someone say
-# [Thunderfury...]?!", see FILLER_ITEM_NAME below) on the fly without it needing to be a
-# real item.json entry, which a standalone World can't do -- so it's listed explicitly here
-# as entry #172, count 1, no category.
+# Manual's engine synthesizes its configured filler_item_name on the fly without it needing
+# to be a real item.json entry, which a standalone World can't do, so it's listed explicitly
+# here as entry #172, count 1, no category. Named "Murloc" (see FILLER_ITEM_NAME below) to
+# match the Manual WoW Dungeons project; it keeps the same item id as the old Thunderfury
+# filler, since ids follow entry order, not names.
 _RAW_ITEMS: list[dict] = [
     {'count': 10, 'name': 'Gold', 'category': ['Gold'], 'progression': True},
     {'count': 1, 'name': 'Maximum Level 20', 'category': ['Maximum Levels', 'Sequential Levels', 'Vanilla'], 'progression': True},
@@ -188,7 +189,7 @@ _RAW_ITEMS: list[dict] = [
     {'count': 1, 'name': "Mogu'shan Palace (87-90)", 'category': ['Dungeons', 'Dungeons 85-90', 'Mists of Pandaria'], 'filler': True},
     {'count': 1, 'name': 'Siege of Niuzao Temple (88-90)', 'category': ['Dungeons', 'Dungeons 85-90', 'Mists of Pandaria'], 'filler': True},
     {'count': 1, 'name': 'Gate of the Setting Sun (88-90)', 'category': ['Dungeons', 'Dungeons 85-90', 'Mists of Pandaria'], 'filler': True},
-    {'count': 1, 'name': 'Did someone say [Thunderfury, Blessed Blade of the Windseeker]?!', 'category': [], 'filler': True},
+    {'count': 1, 'name': 'Murloc', 'category': [], 'filler': True},
 ]
 
 _RAW_CATEGORIES: dict = {'Dungeons': {'yaml_option': ['include_dungeons']}}
@@ -236,7 +237,7 @@ CATEGORY_YAML_GATES: dict[str, list[str]] = {
 
 # The original Manual project's configured filler_item_name, used to pad the pool out to
 # the location count once every other item has been placed/filtered.
-FILLER_ITEM_NAME = "Did someone say [Thunderfury, Blessed Blade of the Windseeker]?!"
+FILLER_ITEM_NAME = "Murloc"
 
 GOLD_ITEM_NAME = "Gold"
 PROGRESSIVE_LEVELS_ITEM_NAME = "Progressive Levels"
