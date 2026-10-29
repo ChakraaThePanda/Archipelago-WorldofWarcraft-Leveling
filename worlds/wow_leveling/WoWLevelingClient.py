@@ -478,6 +478,20 @@ def _find_addon_sv_files(wow_install_dir: str) -> typing.List[str]:
     return glob.glob(pattern)
 
 
+def _find_all_ap_sv_files(wow_install_dir: str) -> typing.List[str]:
+    """Every file either addon keeps under any character (both SavedVariables files and
+    the .bak copies WoW keeps of each), for /wowclear. Unlike _find_addon_sv_files this
+    also catches a character that only has a leftover bridge file."""
+    if not wow_install_dir:
+        return []
+    files = []
+    for name in (ADDON_SV_FILENAME, BRIDGE_SV_FILENAME):
+        for suffix in ("", ".bak"):
+            pattern = os.path.join(wow_install_dir, "WTF", "Account", "*", "*", "*", "SavedVariables", name + suffix)
+            files.extend(glob.glob(pattern))
+    return sorted(files)
+
+
 def _character_identity(addon_sv_path: str) -> str:
     """"<Account>/<Realm>/<Character>", read straight from the SavedVariables path itself
     (.../WTF/Account/<Account>/<Realm>/<Character>/SavedVariables/ArchipelagoWoW.lua) --
@@ -607,6 +621,48 @@ class WoWLevelingCommandProcessor(ClientCommandProcessor):
         _save_pin(room_key, chosen)
         logger.info(f"[WoW Leveling] Pinned character set to {chosen} for this slot.")
         return True
+
+    def _cmd_wowclear(self, confirm: str = "") -> bool:
+        """Delete the Archipelago addon data of every WoW character under the configured
+        install. No argument lists what would be deleted; /wowclear confirm deletes it.
+        Close WoW first: a character still logged in writes its data back at logout.
+        Each character starts fresh at its next login. Character pins are kept."""
+        ctx: WoWLevelingContext = self.ctx
+        files = _find_all_ap_sv_files(ctx.wow_install_dir)
+        if not files:
+            logger.info("[WoW Leveling] No Archipelago addon data found under the configured WoW install.")
+            return True
+
+        identities = sorted({_character_identity(p) for p in files})
+        if confirm.strip().lower() != "confirm":
+            logger.info(f"[WoW Leveling] Archipelago addon data found for {len(identities)} character(s):")
+            for identity in identities:
+                logger.info(f"  {identity}")
+            logger.info(
+                "[WoW Leveling] Close WoW first (a logged-in character writes its data back at "
+                "logout), then run /wowclear confirm to delete all of it."
+            )
+            return True
+
+        failed = []
+        for path in files:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                failed.append(path)
+
+        # Nothing read from the deleted files applies anymore, and the shutdown write must
+        # not recreate a bridge file for a character that was just cleared.
+        ctx.forget_addon_reads()
+        ctx.active_addon_sv_path = None
+        ctx._last_bridge_fingerprint = None
+
+        logger.info(f"[WoW Leveling] Cleared Archipelago addon data for {len(identities)} character(s).")
+        for path in failed:
+            logger.warning(f"[WoW Leveling] Couldn't delete {path}")
+        return not failed
 
 
 class WoWLevelingContext(SuperContext):

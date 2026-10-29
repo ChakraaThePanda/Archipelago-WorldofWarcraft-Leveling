@@ -38,6 +38,8 @@
   received its level items. **View Zones / Progress** in the addon shows both.
 - Connecting an already-leveled character to a new slot? Click **Send All Previous Levels**.
 - Type `/apwow` in game to open the addon.
+- To wipe the addon's data from every character, close WoW and run `/wowclear` in the
+  client. It lists what it found; `/wowclear confirm` deletes it.
 
 ## Notes
 
