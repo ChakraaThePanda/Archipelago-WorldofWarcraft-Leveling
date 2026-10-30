@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from BaseClasses import Location
 
@@ -122,6 +122,9 @@ STAT_QUESTS_COMPLETED = 98
 STAT_TOTAL_DEATHS = 60
 STAT_TIMES_HEARTHED = 353
 STAT_FLIGHT_PATHS_TAKEN = 349
+# Not a real statistic: the addon counts this character's earned zone exploration
+# achievements itself (see Stats.lua), since no Statistics-tab entry tracks them.
+STAT_ZONES_EXPLORED = "zonesExplored"
 
 COPPER_PER_GOLD = 10000
 
@@ -169,6 +172,10 @@ _RAW_STAT_LOCATIONS += [
     {'name': 'Use Your Hearthstone', 'stat': STAT_TIMES_HEARTHED, 'threshold': 1, 'region': 'Levels 01-10'},
     {'name': 'Take a Flight Path', 'stat': STAT_FLIGHT_PATHS_TAKEN, 'threshold': 1, 'region': 'Levels 11-20'},
 ]
+# Exploring every subzone of even a starting zone takes a while, so not before 11-20.
+_RAW_STAT_LOCATIONS += [
+    {'name': 'Fully Explore a Zone', 'stat': STAT_ZONES_EXPLORED, 'threshold': 1, 'region': 'Levels 11-20'},
+]
 
 
 class WoWLevelingLocation(Location):
@@ -180,7 +187,8 @@ class LocationData:
     id: int
     region: str
     # Set only for Statistics-tab milestones: GetStatistic(stat_id) >= threshold checks it.
-    stat_id: Optional[int] = None
+    # A str stat_id names a value the addon computes itself instead (STAT_ZONES_EXPLORED).
+    stat_id: Optional[Union[int, str]] = None
     threshold: Optional[int] = None
 
 
