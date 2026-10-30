@@ -7,3 +7,9 @@ Reach your chosen maximum level or find all the Gold items (McGuffin).
   (goal, what gets shuffled, how zones and level caps unlock)
 * Follow the [setup guide](worlds/wow_leveling/docs/setup_en.md) (apworld install, WoW
   addon install, connecting to a room)
+
+---
+
+### Questions or feedback?
+
+Need help, found a bug, or have an idea? Join my Discord server, [Chakraa's Projects](https://discord.gg/bkk4nVXcjm), and post in this project's channel.
