@@ -128,27 +128,13 @@ also runs on retail.
 
 ## One .toc for every expansion
 
-Each folder ships a single `<AddonName>.toc`, pinned to `## Interface: 30300` (Wrath of
-the Lich King).
-
-That one file is enough for every expansion in scope, not just Wrath, because nothing in
-the Lua code branches on the `.toc`'s declared Interface number at all. `Compat.lua`
-checks whether a given global actually exists right now (`C_Map ~= nil`,
-`BackdropTemplateMixin ~= nil`), which gives the correct answer on whichever original
-client is actually running, Vanilla through Mists, regardless of what the `.toc` claims.
-The Interface field only ever controls one thing client-side: whether the addon shows as
-"out of date" (and is hidden by default) in the AddOns list on a client whose own build
-number doesn't match it. If that happens, checking "Load out of date AddOns" in that
-list (a checkbox that's existed since Vanilla) makes it load and run exactly the same as
-on Wrath; there's no separate file to swap in for a different expansion.
+Each folder ships a single `<AddonName>.toc`, pinned to `## Interface: 30300`. That one
+file is enough for every expansion, because nothing in the Lua code branches on the
+Interface number, client flavor or `WOW_PROJECT_ID`, only on the actual API surface (does
+this global/mixin exist right now? e.g. `C_Map ~= nil`, `BackdropTemplateMixin ~= nil`).
+The Interface field only controls whether the addon shows as "out of date" in the AddOns
+list on a client whose own build number doesn't match it; checking "Load out of date
+AddOns" there makes it load and run normally.
 
 All the Lua in both addon folders sticks to the conservative subset listed in
 `Compat.lua`'s header; check new code against that list.
-
-Earlier revisions of this addon shipped a `_<Flavor>.toc` per expansion. Those extra
-files were removed rather than kept as dead weight; this single `.toc` is the whole story
-now.
-
-The Lua code itself (see `Compat.lua`) never branches on client flavor or
-`WOW_PROJECT_ID` at all, only on the actual API surface (does this global/mixin
-exist right now?), so the same files run on every expansion.
